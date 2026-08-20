@@ -223,11 +223,18 @@
 
     <!-- 자바스크립트 및 Supabase 연동 로직 -->
     <script>
-        let isAdminLoggedIn = false;
-        let currentSelectedWeek = "";
-        let teacherDataStore = {};
-        let attendanceRecords = {};
-        let globalReservations = [];
+        // ★ [중요] 본인의 Supabase 프로젝트 URL과 Anon Key를 아래에 정확히 입력해주세요!
+        var SUPABASE_URL = 'https://haaiwbjdlqwrfrvsurxi.supabase.co'; 
+        var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhhYWl3YmpkbHF3cmZydnN1cnhpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY1MTQ1NjQsImV4cCI6MjEwMjA5MDU2NH0.hiMuLbrgkF2W_-PR5dfwmqI2TAOLi3yJv25_iCMovFE'; 
+        
+        var supabaseClient = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+
+        // ★ 변수들을 함수보다 먼저 선언하여 ReferenceError 원천 차단
+        var isAdminLoggedIn = false;
+        var currentSelectedWeek = "";
+        var teacherDataStore = {};
+        var attendanceRecords = {};
+        var globalReservations = [];
 
         const teacherMap = {
             "9565": "황성웅", "9414": "정다운", "9062": "김신형", "2368": "문지현",
@@ -243,10 +250,6 @@
             "김준영", "박신언", "윤태민",
             "고광준", "이영찬", "오세현"
         ];
-
-        const SUPABASE_URL = 'YOUR_SUPABASE_URL'; 
-        const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY'; 
-        const supabaseClient = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
 
         async function loadDataFromSupabase() {
             if (!supabaseClient) return;
@@ -478,7 +481,6 @@
             }
         }
 
-        // 텍스트에서 시간(오전/오후 및 숫자)을 추출하여 24시간 기준으로 변환해 주는 정렬용 파서 함수
         function parseSlotTime(title) {
             if (!title) return 9999;
             let match = title.match(/(오전|오후)\s*(\d{1,2})시/);
@@ -486,7 +488,7 @@
                 match = title.match(/(\d{1,2})시/);
                 if (!match) return 9999;
                 let hour = parseInt(match[1], 10);
-                return hour < 9 ? hour + 12 : hour; // 기본적으로 오후로 간주하거나 숫자로 정렬
+                return hour < 9 ? hour + 12 : hour;
             }
             let isPm = match[1] === '오후';
             let hour = parseInt(match[2], 10);
@@ -535,7 +537,6 @@
             saveDataToSupabase('attendanceRecords', attendanceRecords);
         }
 
-        // [통합 출석부 렌더링] 선생님별 열(Column) 가로 배치 + 각 선생님의 시간표는 위에서 아래(세로) 배치 (시간순 정렬 적용)
         function renderIntegratedTimetable() {
             updateSectionDateLabels();
             ['friday', 'saturday', 'sunday'].forEach(day => {
@@ -555,7 +556,6 @@
                         hasAnySlot = true;
                     }
 
-                    // 선생님 1명당 하나의 세로 컬럼 박스 생성
                     columnsHtml += `<div class="w-80 shrink-0 bg-zinc-50/80 p-4 rounded-xl border border-zinc-200 self-start space-y-4">`;
                     columnsHtml += `<div class="pb-2 border-b-2 border-primary"><span class="font-extrabold text-primary text-sm">${tName}T</span></div>`;
                     
@@ -619,7 +619,6 @@
             });
         }
 
-        // [개인 출석부 렌더링] 시간 순서대로 읽어서 좌에서 우로 가로 배치
         function renderTimetableAndSlots(teacherName) {
             updateSectionDateLabels();
             const data = teacherDataStore[teacherName];
