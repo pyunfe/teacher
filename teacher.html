@@ -1,0 +1,1095 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>국성티처</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Pretendard 폰트 -->
+    <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css" rel="stylesheet"/>
+    <!-- SortableJS (드래그 앤 드롭 라이브러리) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+    <!-- SheetJS (엑셀 파일 파싱 라이브러리) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- Supabase JS SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#802020',
+                        'primary-hover': '#601818',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Pretendard Variable', sans-serif; }
+        .student-block { cursor: grab; transition: all 0.15s; }
+        .student-block:active { cursor: grabbing; }
+        .sortable-ghost { opacity: 0.4; background: #e5e7eb !important; }
+        .horizontal-scroll-container::-webkit-scrollbar { height: 8px; }
+        .horizontal-scroll-container::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
+        .horizontal-scroll-container::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .horizontal-scroll-container::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body class="bg-[#F7F7F5] text-[#1c1b1b]">
+
+    <!-- 1. 로그인 화면 -->
+    <div id="login-screen" class="flex items-center justify-center min-h-screen bg-[#F7F7F5]">
+        <div class="bg-white p-8 rounded-2xl shadow-sm border border-zinc-200 w-96 text-center">
+            <h1 class="text-2xl font-bold text-primary mb-2 tracking-tight">국성티처</h1>
+            <p class="text-zinc-500 mb-6 text-sm">중·고등부 학원 관리 시스템 로그인</p>
+            <div class="space-y-4">
+                <input type="password" id="login-input" placeholder="전화번호 뒷4자리" maxlength="4" 
+                    onkeydown="if(event.key === 'Enter') handleLogin()"
+                    class="w-full px-4 py-3 border border-zinc-300 rounded-xl text-center text-lg tracking-widest focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary">
+                <button onclick="handleLogin()" class="w-full bg-primary text-white py-3 rounded-xl font-semibold hover:bg-primary-hover transition">
+                    로그인
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. 메인 앱 화면 -->
+    <div id="app-screen" class="hidden min-h-screen flex flex-col">
+        <!-- 상단 내비게이션 바 -->
+        <header class="bg-white border-b border-zinc-200 px-6 py-4 flex justify-between items-center sticky top-0 z-40">
+            <div class="flex items-center space-x-4">
+                <h1 class="text-xl font-bold text-primary tracking-tighter">국성티처</h1>
+                <span id="user-badge" class="px-3 py-1 bg-[#802020]/10 text-primary rounded-full text-sm font-medium">강사 모드</span>
+                
+                <!-- 관리자용 강사/통합 선택 -->
+                <div id="admin-selector-wrapper" class="hidden flex items-center space-x-2">
+                    <label class="text-sm text-zinc-600">보기 모드:</label>
+                    <select id="teacher-select" onchange="changeTeacher(this.value)" class="border border-zinc-300 rounded-lg px-3 py-1 text-sm bg-zinc-50 focus:outline-none focus:ring-1 focus:ring-primary">
+                        <option value="통합출석부">🌟 전체 통합 출석부 (관리자 전용)</option>
+                        <option value="황성웅">황성웅T</option>
+                        <optgroup label="중등부">
+                            <option value="정다운">정다운T</option>
+                            <option value="김신형">김신형T</option>
+                            <option value="문지현">문지현T</option>
+                        </optgroup>
+                        <optgroup label="고등부">
+                            <option value="강윤지">강윤지T</option>
+                            <option value="이현영">이현영T</option>
+                            <option value="김명일">김명일T</option>
+                            <option value="김준영">김준영T</option>
+                            <option value="박신언">박신언T</option>
+                            <option value="윤태민">윤태민T</option>
+                            <option value="고광준">고광준T</option>
+                            <option value="이영찬">이영찬T</option>
+                            <option value="오세현">오세현T</option>
+                        </optgroup>
+                    </select>
+                </div>
+            </div>
+
+            <!-- 탭 메뉴 & 로그아웃 -->
+            <div class="flex items-center space-x-6">
+                <nav class="space-x-2">
+                    <button onclick="switchTab('attendance')" id="tab-attendance-btn" class="px-4 py-2 rounded-lg font-semibold bg-primary text-white transition">출석부</button>
+                    <button onclick="switchTab('management')" id="tab-management-btn" class="px-4 py-2 rounded-lg font-semibold text-zinc-600 hover:bg-zinc-100 transition">원생 관리</button>
+                    <button onclick="switchTab('admin-reservations')" id="tab-admin-reservations-btn" class="px-4 py-2 rounded-lg font-semibold text-zinc-600 hover:bg-zinc-100 transition">전송 예약 관리</button>
+                </nav>
+                <button onclick="handleLogout()" class="text-sm text-red-500 hover:underline">로그아웃</button>
+            </div>
+        </header>
+
+        <!-- 메인 콘텐츠 영역 -->
+        <main class="flex-1 p-6 max-w-7xl mx-auto w-full">
+            
+            <!-- ① 출석부 탭 -->
+            <section id="tab-attendance" class="space-y-6">
+                <div class="flex justify-between items-center bg-white p-4 rounded-2xl shadow-sm border border-zinc-200">
+                    <div>
+                        <h2 class="text-xl font-bold text-zinc-800" id="attendance-title">출석부</h2>
+                    </div>
+                    <div class="flex items-center space-x-3">
+                        <div class="flex items-center space-x-2">
+                            <label class="text-xs font-semibold text-zinc-600">조회 주차:</label>
+                            <select id="week-select" onchange="changeWeek(this.value)" class="border border-zinc-300 rounded-xl px-3 py-1.5 text-sm bg-zinc-50 focus:outline-none focus:ring-1 focus:ring-primary font-bold text-primary">
+                                <!-- 동적으로 생성됨 -->
+                            </select>
+                        </div>
+                        <div id="slot-add-btn-wrapper">
+                            <button onclick="addSlotBoxPrompt()" class="bg-zinc-800 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-zinc-900 transition">
+                                + 시간대 박스 추가
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 전체 출석부 컨테이너 (금, 토, 일 요일별 섹션) -->
+                <div class="space-y-8" id="timetable-container">
+                    
+                    <!-- [금요일 섹션] -->
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-zinc-200">
+                        <div class="flex justify-between items-center mb-4 pb-2 border-b border-zinc-100">
+                            <h3 class="text-primary font-extrabold text-lg" id="label-friday">금요일</h3>
+                            <button id="btn-add-friday" onclick="addSlotBox('friday')" class="text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-700 px-3 py-1.5 rounded-lg font-semibold transition">+ 시간대 박스 추가</button>
+                        </div>
+                        <div class="horizontal-scroll-container overflow-x-auto pb-3">
+                            <div class="flex space-x-4 items-start min-max-content" id="row-friday"></div>
+                        </div>
+                    </div>
+
+                    <!-- [토요일 섹션] -->
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-zinc-200">
+                        <div class="flex justify-between items-center mb-4 pb-2 border-b border-zinc-100">
+                            <h3 class="text-primary font-extrabold text-lg" id="label-saturday">토요일</h3>
+                            <button id="btn-add-saturday" onclick="addSlotBox('saturday')" class="text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-700 px-3 py-1.5 rounded-lg font-semibold transition">+ 시간대 박스 추가</button>
+                        </div>
+                        <div class="horizontal-scroll-container overflow-x-auto pb-3">
+                            <div class="flex space-x-4 items-start min-max-content" id="row-saturday"></div>
+                        </div>
+                    </div>
+
+                    <!-- [일요일 섹션] -->
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-zinc-200">
+                        <div class="flex justify-between items-center mb-4 pb-2 border-b border-zinc-100">
+                            <h3 class="text-primary font-extrabold text-lg" id="label-sunday">일요일</h3>
+                            <button id="btn-add-sunday" onclick="addSlotBox('sunday')" class="text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-700 px-3 py-1.5 rounded-lg font-semibold transition">+ 시간대 박스 추가</button>
+                        </div>
+                        <div class="horizontal-scroll-container overflow-x-auto pb-3">
+                            <div class="flex space-x-4 items-start min-max-content" id="row-sunday"></div>
+                        </div>
+                    </div>
+
+                </div>
+            </section>
+
+            <!-- ② 원생 관리 탭 -->
+            <section id="tab-management" class="hidden space-y-6">
+                <div class="flex justify-between items-center">
+                    <div>
+                        <h2 class="text-xl font-bold text-zinc-800" id="management-title">원생 관리 및 카카오톡 전송 예약</h2>
+                        <p class="text-sm text-zinc-500">원생을 선택하고 전송할 내용을 작성한 뒤 예약 설정을 진행하세요.</p>
+                    </div>
+                    <div class="space-x-2 flex items-center">
+                        <input type="file" id="excel-file-input" accept=".xlsx, .xls, .csv" style="display: none;" onchange="handleExcelUpload(event)">
+                        <button onclick="document.getElementById('excel-file-input').click()" class="bg-emerald-700 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-emerald-800 transition">
+                            📁 통통통 엑셀 일괄 등록
+                        </button>
+                        <button onclick="addNewManagementStudent()" class="bg-zinc-800 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-zinc-900 transition">+ 원생 신규 등록</button>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
+                    <div class="md:col-span-5 bg-white p-5 rounded-2xl shadow-sm border border-zinc-200 space-y-3">
+                        <div class="flex justify-between items-center pb-2 border-b border-zinc-100">
+                            <label class="flex items-center space-x-2 cursor-pointer">
+                                <input type="checkbox" id="select-all-checkbox" onchange="toggleSelectAll(this)" class="w-4 h-4 text-primary rounded border-zinc-300 focus:ring-primary">
+                                <span class="font-bold text-sm text-zinc-800">전체 원생 목록 (가나다순)</span>
+                            </label>
+                            <span class="text-xs text-zinc-400" id="selected-count">0명 선택됨</span>
+                        </div>
+                        <div id="management-student-list" class="space-y-2 max-h-[500px] overflow-y-auto pr-1"></div>
+                    </div>
+
+                    <div class="md:col-span-7 bg-white p-6 rounded-2xl shadow-sm border border-zinc-200 space-y-5">
+                        <h3 class="font-bold text-base text-zinc-800 border-b border-zinc-100 pb-2">카카오톡 전송 내용 작성</h3>
+                        <div class="space-y-1">
+                            <label class="text-xs font-semibold text-zinc-600">발송 메시지 내용</label>
+                            <textarea id="kakao-msg-content" rows="7" 
+                                class="w-full border border-zinc-200 rounded-xl p-3 focus:outline-none focus:ring-1 focus:ring-primary text-sm resize-none" 
+                                placeholder="학부모님/학생에게 전달할 알림톡 내용을 입력하세요..."></textarea>
+                        </div>
+                        <div class="space-y-1">
+                            <label class="text-xs font-semibold text-zinc-600">예약 일시 선택</label>
+                            <div class="grid grid-cols-2 gap-3">
+                                <input type="date" id="reserve-date" class="border border-zinc-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary text-zinc-700">
+                                <input type="time" id="reserve-time" class="border border-zinc-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary text-zinc-700">
+                            </div>
+                        </div>
+                        <button onclick="handleKakaoReservation()" class="w-full bg-primary text-white py-3 rounded-xl font-semibold hover:bg-primary-hover transition shadow-sm">
+                            전송 예약하기
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ③ 전송 예약 관리 탭 -->
+            <section id="tab-admin-reservations" class="hidden space-y-6">
+                <div>
+                    <h2 class="text-xl font-bold text-zinc-800" id="admin-res-page-title">카카오톡 전송 예약 관리</h2>
+                    <p class="text-sm text-zinc-500" id="admin-res-page-desc">신청한 예약 내역을 확인하고 자동화 프로그램 연동 상태를 관리합니다.</p>
+                </div>
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-zinc-200">
+                    <div id="admin-reservation-list" class="space-y-4"></div>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <!-- 자바스크립트 및 Supabase 연동 로직 -->
+    <script>
+        let isAdminLoggedIn = false;
+        let currentSelectedWeek = "";
+        let teacherDataStore = {};
+        let attendanceRecords = {};
+        let globalReservations = [];
+
+        const teacherMap = {
+            "9565": "황성웅", "9414": "정다운", "9062": "김신형", "2368": "문지현",
+            "9248": "강윤지", "3374": "이현영", "2428": "김명일",
+            "1357": "김준영", "1316": "박신언", "5282": "윤태민",
+            "9270": "고광준", "4782": "이영찬", "5068": "오세현",
+            "8566": "관리자"
+        };
+
+        const orderedTeacherNames = [
+            "황성웅", "정다운", "김신형", "문지현",
+            "강윤지", "이현영", "김명일",
+            "김준영", "박신언", "윤태민",
+            "고광준", "이영찬", "오세현"
+        ];
+
+        const SUPABASE_URL = 'YOUR_SUPABASE_URL'; 
+        const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY'; 
+        const supabaseClient = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+
+        function initWeeks() {
+            const weekSelect = document.getElementById("week-select");
+            if (!weekSelect) return;
+            weekSelect.innerHTML = "";
+            
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            const dayOfWeek = today.getDay(); 
+            let diffToSaturday = 6 - dayOfWeek;
+            
+            const currentSaturday = new Date(today);
+            currentSaturday.setDate(today.getDate() + diffToSaturday);
+            currentSaturday.setHours(0, 0, 0, 0);
+
+            const baseStartDate = new Date("2026-08-22"); 
+            baseStartDate.setHours(0, 0, 0, 0);
+
+            let diffTime = currentSaturday.getTime() - baseStartDate.getTime();
+            let diffWeeks = Math.floor(diffTime / (1000 * 60 * 60 * 24 * 7));
+            if (diffWeeks < 0) diffWeeks = 0;
+
+            let defaultSelectedWeekKey = "";
+
+            for (let i = 0; i <= diffWeeks; i++) {
+                let satDateObj = new Date(baseStartDate);
+                satDateObj.setDate(baseStartDate.getDate() + (i * 7));
+                
+                let saturdayDate = getFormattedDate(satDateObj);
+                let fridayDate = getFormattedDate(new Date(satDateObj.getTime() - 86400000));
+                let sundayDate = getFormattedDate(new Date(satDateObj.getTime() + 86400000));
+                
+                let weekKey = `${saturdayDate} 주차`;
+                let option = document.createElement("option");
+                option.value = weekKey;
+                option.setAttribute('data-fri', fridayDate);
+                option.setAttribute('data-sat', saturdayDate);
+                option.setAttribute('data-sun', sundayDate);
+                option.innerText = `${weekKey} (토:${saturdayDate.slice(5)})`;
+                
+                weekSelect.appendChild(option);
+
+                if (i === diffWeeks) {
+                    option.selected = true;
+                    defaultSelectedWeekKey = weekKey;
+                }
+            }
+
+            currentSelectedWeek = defaultSelectedWeekKey;
+            updateSectionDateLabels();
+        }
+
+        initWeeks();
+        window.addEventListener("DOMContentLoaded", () => {
+            initWeeks();
+            initDragAndDrop();
+        });
+
+        function handleLogin() {
+            const inputVal = document.getElementById("login-input").value.trim();
+            if (!inputVal) {
+                alert("비밀번호를 입력해주세요.");
+                return;
+            }
+
+            const adminResBtn = document.getElementById("tab-admin-reservations-btn");
+            initWeeks();
+
+            if (inputVal === "8566") {
+                isAdminLoggedIn = true;
+                document.getElementById("user-badge").innerText = "관리자 모드 (전체 권한)";
+                document.getElementById("admin-selector-wrapper").classList.remove("hidden");
+                adminResBtn.classList.remove("hidden");
+                document.getElementById("admin-res-page-title").innerText = "강사별 카카오톡 전송 예약 관리";
+                document.getElementById("admin-res-page-desc").innerText = "강사들이 신청한 예약 내역을 확인하고 자동화 프로그램 연동 상태를 관리합니다.";
+                changeTeacher("통합출석부");
+            } else if (teacherMap[inputVal]) {
+                isAdminLoggedIn = false;
+                const tName = teacherMap[inputVal];
+                document.getElementById("user-badge").innerText = `강사 모드 (${tName}T)`;
+                document.getElementById("admin-selector-wrapper").classList.add("hidden");
+                adminResBtn.classList.remove("hidden");
+                document.getElementById("admin-res-page-title").innerText = "카카오톡 전송 예약 내역";
+                document.getElementById("admin-res-page-desc").innerText = "본인이 신청한 카카오톡 전송 예약 내역을 확인합니다.";
+                changeTeacher(tName);
+            } else {
+                alert("등록되지 않은 비밀번호입니다.");
+                return;
+            }
+
+            document.getElementById("login-screen").classList.add("hidden");
+            document.getElementById("app-screen").classList.remove("hidden");
+        }
+
+        function handleLogout() {
+            document.getElementById("login-input").value = "";
+            isAdminLoggedIn = false;
+            document.getElementById("app-screen").classList.add("hidden");
+            document.getElementById("login-screen").classList.remove("hidden");
+        }
+
+        function getFormattedDate(dateObj) {
+            let year = dateObj.getFullYear();
+            let month = String(dateObj.getMonth() + 1).padStart(2, '0');
+            let day = String(dateObj.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        }
+
+        async function changeWeek(weekKey) {
+            currentSelectedWeek = weekKey;
+            updateSectionDateLabels();
+
+            const currentTeacher = getCurrentActiveTeacher();
+            if (currentTeacher === "통합출석부") {
+                renderIntegratedTimetable();
+            } else {
+                renderTimetableAndSlots(currentTeacher);
+            }
+        }
+
+        function updateSectionDateLabels() {
+            const selectElem = document.getElementById("week-select");
+            if (!selectElem || selectElem.selectedIndex === -1) return;
+            const selectedOpt = selectElem.options[selectElem.selectedIndex];
+            
+            const fri = selectedOpt.getAttribute('data-fri');
+            const sat = selectedOpt.getAttribute('data-sat');
+            const sun = selectedOpt.getAttribute('data-sun');
+
+            document.getElementById("label-friday").innerText = `금요일 (${fri})`;
+            document.getElementById("label-saturday").innerText = `토요일 (${sat})`;
+            document.getElementById("label-sunday").innerText = `일요일 (${sun})`;
+        }
+
+        function initDragAndDrop() {
+            const dropzones = document.querySelectorAll('.dropzone');
+            dropzones.forEach(zone => {
+                if (!zone.getAttribute('data-sortable')) {
+                    new Sortable(zone, {
+                        group: 'shared-timetable',
+                        animation: 150,
+                        ghostClass: 'sortable-ghost',
+                        onEnd: function (evt) {
+                            const itemEl = evt.item;
+                            const targetZone = evt.to;
+                            const studentName = itemEl.getAttribute('data-student-name');
+                            const newSlotId = targetZone.getAttribute('data-slot-id');
+                            
+                            const currentTeacher = getCurrentActiveTeacher();
+                            if (currentTeacher && currentTeacher !== "통합출석부" && teacherDataStore[currentTeacher]) {
+                                const studentObj = teacherDataStore[currentTeacher].students.find(s => s.name === studentName);
+                                if (studentObj) {
+                                    studentObj.slotId = newSlotId;
+                                    sortStudentsAlphabetically(currentTeacher);
+                                    renderFullApp(currentTeacher);
+                                }
+                            }
+                        }
+                    });
+                    zone.setAttribute('data-sortable', 'true');
+                }
+            });
+        }
+
+        function changeTeacher(targetValue) {
+            if (targetValue === "통합출석부") {
+                document.getElementById("attendance-title").innerText = "전체 통합 출석부";
+                if(document.getElementById("teacher-select")) document.getElementById("teacher-select").value = "통합출석부";
+                document.getElementById("slot-add-btn-wrapper").classList.add("hidden");
+                renderIntegratedTimetable();
+                return;
+            }
+
+            document.getElementById("attendance-title").innerText = `${targetValue}T 출석부`;
+            document.getElementById("slot-add-btn-wrapper").classList.remove("hidden");
+            
+            if(document.getElementById("teacher-select")) {
+                document.getElementById("teacher-select").value = targetValue;
+            }
+
+            if (!teacherDataStore[targetValue]) {
+                initDefaultTeacherData(targetValue);
+            }
+
+            sortStudentsAlphabetically(targetValue);
+            renderFullApp(targetValue);
+        }
+
+        function sortStudentsAlphabetically(teacherName) {
+            if (teacherDataStore[teacherName] && teacherDataStore[teacherName].students) {
+                teacherDataStore[teacherName].students.sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+            }
+        }
+
+        function initDefaultTeacherData(teacherName) {
+            teacherDataStore[teacherName] = {
+                slots: { friday: [], saturday: [], sunday: [] },
+                students: []
+            };
+        }
+
+        function renderFullApp(teacherName) {
+            sortStudentsAlphabetically(teacherName);
+            renderTimetableAndSlots(teacherName);
+            renderManagementStudents(teacherName);
+        }
+
+        function getStudentRecord(studentName) {
+            if (!attendanceRecords[currentSelectedWeek]) {
+                attendanceRecords[currentSelectedWeek] = {};
+            }
+            if (!attendanceRecords[currentSelectedWeek][studentName]) {
+                attendanceRecords[currentSelectedWeek][studentName] = { status: '출석', memo: '' };
+            }
+            return attendanceRecords[currentSelectedWeek][studentName];
+        }
+
+        function updateStudentStatus(studentName, status) {
+            const rec = getStudentRecord(studentName);
+            rec.status = status;
+        }
+
+        function updateStudentMemo(studentName, memoText) {
+            const rec = getStudentRecord(studentName);
+            rec.memo = memoText;
+        }
+
+        function renderIntegratedTimetable() {
+            updateSectionDateLabels();
+            ['friday', 'saturday', 'sunday'].forEach(day => {
+                const rowContainer = document.getElementById(`row-${day}`);
+                rowContainer.innerHTML = "";
+                
+                let allSlotsForDay = [];
+
+                orderedTeacherNames.forEach(tName => {
+                    if (!teacherDataStore[tName]) initDefaultTeacherData(tName);
+                    const tData = teacherDataStore[tName];
+                    const daySlots = tData.slots[day] || [];
+
+                    daySlots.forEach(slot => {
+                        allSlotsForDay.push({
+                            teacherName: tName,
+                            slot: slot,
+                            students: tData.students.filter(s => s.slotId === slot.id)
+                        });
+                    });
+                });
+
+                if (allSlotsForDay.length === 0) {
+                    rowContainer.innerHTML = '<div class="text-xs text-zinc-400 py-4 text-center w-full">등록된 수업이 없습니다.</div>';
+                    return;
+                }
+
+                let slotsHtml = "";
+                allSlotsForDay.forEach(item => {
+                    let studentsHtml = "";
+
+                    item.students.forEach(s => {
+                        const rec = getStudentRecord(s.name);
+                        const isAtt = rec.status === '출석';
+                        
+                        const attBtnClass = isAtt ? "bg-[#dcfce7] text-[#15803d] font-bold" : "bg-zinc-100 text-zinc-500 font-semibold";
+                        const absBtnClass = !isAtt ? "bg-[#fee2e2] text-[#b91c1c] font-bold" : "bg-zinc-100 text-zinc-500 font-semibold";
+
+                        studentsHtml += `
+                            <div class="student-block flex items-center justify-between p-2 rounded-lg border border-zinc-200 bg-white shadow-sm hover:border-primary gap-1.5" data-student-name="${s.name}">
+                                <div class="w-22 shrink-0 truncate">
+                                    <span class="font-bold text-xs text-zinc-900">${s.name}</span>
+                                    <span class="text-[10px] text-zinc-500">(${s.school})</span>
+                                </div>
+                                <div class="flex items-center space-x-1 shrink-0 justify-center">
+                                    <button onclick="handleStatusClick('${s.name}', '출석', this)" class="px-2 py-0.5 text-[11px] rounded ${attBtnClass} status-btn">출석</button>
+                                    <button onclick="handleStatusClick('${s.name}', '결석', this)" class="px-2 py-0.5 text-[11px] rounded ${absBtnClass} status-btn">결석</button>
+                                </div>
+                                <div class="w-20 shrink-0">
+                                    <input type="text" placeholder="비고" value="${rec.memo}" 
+                                        oninput="updateStudentMemo('${s.name}', this.value)"
+                                        class="w-full text-[11px] border border-zinc-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary text-zinc-700 bg-white">
+                                </div>
+                            </div>
+                        `;
+                    });
+
+                    if (studentsHtml === "") {
+                        studentsHtml = '<div class="text-[11px] text-zinc-400 text-center py-2">학생 없음</div>';
+                    }
+
+                    slotsHtml += `
+                        <div class="w-80 shrink-0 bg-zinc-50/50 p-4 rounded-xl border border-zinc-200 self-start">
+                            <div class="flex justify-between items-center mb-3 pb-2 border-b border-zinc-200">
+                                <div class="truncate">
+                                    <span class="text-xs font-extrabold text-primary mr-1.5">[${item.teacherName}T]</span>
+                                    <span class="text-xs font-bold text-zinc-700">${item.slot.title}</span>
+                                </div>
+                            </div>
+                            <div class="space-y-1.5">${studentsHtml}</div>
+                        </div>
+                    `;
+                });
+
+                rowContainer.innerHTML = slotsHtml;
+            });
+        }
+
+        function renderTimetableAndSlots(teacherName) {
+            updateSectionDateLabels();
+            const data = teacherDataStore[teacherName];
+            if (!data) return;
+
+            ['friday', 'saturday', 'sunday'].forEach(day => {
+                const rowContainer = document.getElementById(`row-${day}`);
+                rowContainer.innerHTML = "";
+                const daySlots = data.slots[day] || [];
+
+                if (daySlots.length === 0) {
+                    rowContainer.innerHTML = '<div class="text-xs text-zinc-400 py-4 text-center w-full">등록된 수업이 없습니다.</div>';
+                    return;
+                }
+
+                let slotsHtml = "";
+                daySlots.forEach(slot => {
+                    const slotStudents = data.students.filter(s => s.slotId === slot.id);
+                    let studentsHtml = "";
+
+                    slotStudents.forEach(s => {
+                        const rec = getStudentRecord(s.name);
+                        const isAtt = rec.status === '출석';
+                        
+                        const attBtnClass = isAtt ? "bg-[#dcfce7] text-[#15803d] font-bold" : "bg-zinc-100 text-zinc-500 font-semibold";
+                        const absBtnClass = !isAtt ? "bg-[#fee2e2] text-[#b91c1c] font-bold" : "bg-zinc-100 text-zinc-500 font-semibold";
+
+                        studentsHtml += `
+                            <div class="student-block flex items-center justify-between p-2 rounded-lg border border-zinc-200 bg-white shadow-sm hover:border-primary gap-1.5" data-student-name="${s.name}">
+                                <div class="w-22 shrink-0 truncate">
+                                    <span class="font-bold text-xs text-zinc-900">${s.name}</span>
+                                    <span class="text-[10px] text-zinc-500">(${s.school})</span>
+                                </div>
+                                <div class="flex items-center space-x-1 shrink-0 justify-center">
+                                    <button onclick="handleStatusClick('${s.name}', '출석', this)" class="px-2 py-0.5 text-[11px] rounded ${attBtnClass} status-btn">출석</button>
+                                    <button onclick="handleStatusClick('${s.name}', '결석', this)" class="px-2 py-0.5 text-[11px] rounded ${absBtnClass} status-btn">결석</button>
+                                </div>
+                                <div class="w-20 shrink-0">
+                                    <input type="text" placeholder="비고" value="${rec.memo}" 
+                                        oninput="updateStudentMemo('${s.name}', this.value)"
+                                        class="w-full text-[11px] border border-zinc-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary text-zinc-700 bg-white">
+                                </div>
+                            </div>
+                        `;
+                    });
+
+                    // [수정 포인트] max-h 및 overflow 제거 -> 무한 확장형 구조
+                    slotsHtml += `
+                        <div class="w-80 shrink-0 bg-zinc-50/50 p-4 rounded-xl border border-zinc-200 self-start">
+                            <div class="flex justify-between items-center mb-3">
+                                <span class="text-xs font-bold text-zinc-700 truncate">${slot.title}</span>
+                                <button onclick="editSlotBox('${teacherName}', '${day}', '${slot.id}')" class="text-[10px] text-zinc-500 hover:text-primary font-semibold shrink-0 ml-2 bg-white px-2 py-1 rounded border border-zinc-200">수정 / 삭제</button>
+                            </div>
+                            <div class="space-y-1.5 dropzone" data-slot-id="${slot.id}">${studentsHtml}</div>
+                        </div>
+                    `;
+                });
+                rowContainer.innerHTML = slotsHtml;
+            });
+
+            initDragAndDrop();
+        }
+
+        function handleStatusClick(studentName, status, btnElement) {
+            updateStudentStatus(studentName, status);
+            const parentContainer = btnElement.parentElement;
+            const buttons = parentContainer.querySelectorAll('.status-btn');
+            
+            buttons.forEach(btn => {
+                btn.className = "px-2 py-0.5 text-[11px] rounded font-semibold bg-zinc-100 text-zinc-500 status-btn";
+            });
+
+            if (status === '출석') {
+                btnElement.className = "px-2 py-0.5 text-[11px] rounded font-bold bg-[#dcfce7] text-[#15803d] status-btn";
+            } else {
+                btnElement.className = "px-2 py-0.5 text-[11px] rounded font-bold bg-[#fee2e2] text-[#b91c1c] status-btn";
+            }
+        }
+
+        function renderManagementStudents(teacherName) {
+            const listContainer = document.getElementById("management-student-list");
+            listContainer.innerHTML = "";
+            const data = teacherDataStore[teacherName];
+            const students = data ? data.students : [];
+
+            document.getElementById("select-all-checkbox").checked = false;
+
+            if (students.length === 0) {
+                listContainer.innerHTML = '<div class="text-xs text-zinc-400 py-6 text-center">등록된 원생이 없습니다.</div>';
+                updateSelectedCount();
+                return;
+            }
+
+            students.forEach((s, idx) => {
+                const item = document.createElement("div");
+                item.className = "flex items-center justify-between p-2.5 rounded-xl border border-zinc-200 bg-zinc-50/50 hover:bg-white transition";
+                item.innerHTML = `
+                    <div class="flex items-center space-x-3 overflow-hidden">
+                        <input type="checkbox" data-index="${idx}" data-name="${s.name}" onchange="updateSelectedCount()" class="student-checkbox w-4 h-4 text-primary rounded border-zinc-300 focus:ring-primary">
+                        <div class="truncate">
+                            <span class="font-bold text-xs text-zinc-900">${s.name}</span>
+                            <span class="text-[11px] text-zinc-500">(${s.school})</span>
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-1 shrink-0">
+                        <button onclick="editManagementStudent('${teacherName}', ${idx})" class="text-[11px] bg-zinc-200 hover:bg-zinc-300 text-zinc-700 px-2.5 py-1 rounded font-semibold transition">수정</button>
+                        <button onclick="deleteManagementStudent('${teacherName}', ${idx})" class="text-[11px] bg-rose-50 hover:bg-rose-100 text-rose-600 px-2 py-1 rounded font-semibold transition">삭제</button>
+                    </div>
+                `;
+                listContainer.appendChild(item);
+            });
+            updateSelectedCount();
+        }
+
+        function toggleSelectAll(masterCheckbox) {
+            const checkboxes = document.querySelectorAll('.student-checkbox');
+            checkboxes.forEach(cb => cb.checked = masterCheckbox.checked);
+            updateSelectedCount();
+        }
+
+        function updateSelectedCount() {
+            const checkboxes = document.querySelectorAll('.student-checkbox:checked');
+            document.getElementById("selected-count").innerText = `${checkboxes.length}명 선택됨`;
+        }
+
+        function getCurrentActiveTeacher() {
+            if(isAdminLoggedIn) {
+                const selectElem = document.getElementById("teacher-select");
+                if(selectElem) return selectElem.value;
+            }
+            const badgeText = document.getElementById("user-badge").innerText;
+            for (let key in teacherMap) {
+                if (badgeText.includes(teacherMap[key])) return teacherMap[key];
+            }
+            return "황성웅";
+        }
+
+        function addNewManagementStudent() {
+            const currentTeacher = getCurrentActiveTeacher();
+            if (currentTeacher === "통합출석부") {
+                alert("통합출석부 모드에서는 원생을 등록할 수 없습니다.");
+                return;
+            }
+            const data = teacherDataStore[currentTeacher];
+
+            let allSlots = [];
+            const dayNameKo = { friday: '금', saturday: '토', sunday: '일' };
+            ['friday', 'saturday', 'sunday'].forEach(day => {
+                if (data.slots[day]) {
+                    data.slots[day].forEach(slot => {
+                        allSlots.push({ id: slot.id, label: `[${dayNameKo[day]}] ${slot.title}` });
+                    });
+                }
+            });
+
+            if (allSlots.length === 0) {
+                alert("먼저 출석부 탭에서 시간대 박스를 하나 이상 생성해주세요!");
+                return;
+            }
+
+            const name = prompt("추가할 원생 이름을 입력하세요:");
+            if (!name) return;
+            const school = prompt("학교 또는 소속을 입력하세요 (예: 청라중1):") || "미입력";
+
+            let slotMsg = "배치할 시간대 번호를 선택하세요:\n";
+            allSlots.forEach((slot, idx) => { slotMsg += `${idx + 1}. ${slot.label}\n`; });
+            const slotChoice = prompt(slotMsg, "1");
+            if (!slotChoice) return;
+
+            const choiceIdx = parseInt(slotChoice) - 1;
+            if (isNaN(choiceIdx) || !allSlots[choiceIdx]) {
+                alert("잘못된 선택입니다.");
+                return;
+            }
+
+            data.students.push({ name, school, slotId: allSlots[choiceIdx].id });
+            renderFullApp(currentTeacher);
+            alert(`"${name}" 원생이 성공적으로 등록되었습니다.`);
+        }
+
+        function editManagementStudent(teacherName, index) {
+            const data = teacherDataStore[teacherName];
+            const student = data.students[index];
+            if (!student) return;
+
+            const newName = prompt("학생 이름을 수정하세요:", student.name);
+            if (newName === null) return;
+            if (newName.trim() === "") {
+                alert("이름은 비워둘 수 없습니다.");
+                return;
+            }
+
+            const newSchool = prompt("학교/소속을 수정하세요:", student.school);
+            if (newSchool === null) return;
+
+            let allSlots = [];
+            const dayNameKo = { friday: '금', saturday: '토', sunday: '일' };
+            let currentSlotIndex = 0;
+            let slotCounter = 0;
+
+            ['friday', 'saturday', 'sunday'].forEach(day => {
+                if (data.slots[day]) {
+                    data.slots[day].forEach(slot => {
+                        if (slot.id === student.slotId) {
+                            currentSlotIndex = slotCounter;
+                        }
+                        allSlots.push({ id: slot.id, label: `[${dayNameKo[day]}] ${slot.title}` });
+                        slotCounter++;
+                    });
+                }
+            });
+
+            if (allSlots.length === 0) {
+                alert("등록된 시간대 박스가 없습니다.");
+                student.name = newName.trim();
+                student.school = newSchool.trim();
+                renderFullApp(teacherName);
+                return;
+            }
+
+            let slotMsg = "배치할 시간대 번호를 선택하세요:\n";
+            allSlots.forEach((slot, idx) => { 
+                let isCurrent = (idx === currentSlotIndex) ? " (현재)" : "";
+                slotMsg += `${idx + 1}. ${slot.label}${isCurrent}\n`; 
+            });
+
+            const slotChoice = prompt(slotMsg, String(currentSlotIndex + 1));
+            if (slotChoice === null) return;
+
+            const choiceIdx = parseInt(slotChoice) - 1;
+            if (isNaN(choiceIdx) || !allSlots[choiceIdx]) {
+                alert("잘못된 선택입니다. 이름과 학교만 우선 수정됩니다.");
+                student.name = newName.trim();
+                student.school = newSchool.trim();
+                renderFullApp(teacherName);
+                return;
+            }
+
+            student.name = newName.trim();
+            student.school = newSchool.trim();
+            student.slotId = allSlots[choiceIdx].id;
+
+            renderFullApp(teacherName);
+            alert("원생 정보가 성공적으로 수정되었습니다!");
+        }
+
+        function handleExcelUpload(event) {
+            const currentTeacher = getCurrentActiveTeacher();
+            if (currentTeacher === "통합출석부") {
+                alert("통합출석부 모드에서는 원생을 등록할 수 없습니다. 특정 강사를 선택한 후 업로드해주세요.");
+                event.target.value = "";
+                return;
+            }
+
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+                    
+                    const jsonRows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                    
+                    if (jsonRows.length === 0) {
+                        alert("엑셀 파일에 데이터가 없습니다.");
+                        return;
+                    }
+
+                    let headerRowIdx = 0;
+                    let nameColIdx = -1;
+                    let schoolColIdx = -1;
+
+                    for (let i = 0; i < Math.min(jsonRows.length, 5); i++) {
+                        let row = jsonRows[i];
+                        for (let j = 0; j < row.length; j++) {
+                            let cellVal = String(row[j] || "").trim();
+                            if (cellVal.includes("이름") || cellVal.includes("학생명")) nameColIdx = j;
+                            if (cellVal.includes("학교") || cellVal.includes("소속") || cellVal.includes("학년")) schoolColIdx = j;
+                        }
+                        if (nameColIdx !== -1) {
+                            headerRowIdx = i;
+                            break;
+                        }
+                    }
+
+                    if (nameColIdx === -1) {
+                        nameColIdx = 0; 
+                        schoolColIdx = 1;
+                        headerRowIdx = 0;
+                    } else {
+                        headerRowIdx += 1;
+                    }
+
+                    if (!teacherDataStore[currentTeacher]) initDefaultTeacherData(currentTeacher);
+                    const tData = teacherDataStore[currentTeacher];
+
+                    let defaultSlotId = '';
+                    if (tData.slots.saturday.length > 0) {
+                        defaultSlotId = tData.slots.saturday[0].id;
+                    } else {
+                        defaultSlotId = 'slot-saturday-' + Date.now();
+                        tData.slots.saturday.push({ id: defaultSlotId, title: '정규반 (일괄등록)' });
+                    }
+
+                    let addedCount = 0;
+                    for (let i = headerRowIdx; i < jsonRows.length; i++) {
+                        let row = jsonRows[i];
+                        if (!row || row.length === 0) continue;
+
+                        let name = String(row[nameColIdx] || "").trim();
+                        if (!name || name === "이름" || name === "학생명") continue;
+
+                        let school = schoolColIdx !== -1 && row[schoolColIdx] ? String(row[schoolColIdx]).trim() : "통통통등록";
+
+                        let exists = tData.students.some(s => s.name === name);
+                        if (!exists) {
+                            tData.students.push({
+                                name: name,
+                                school: school,
+                                slotId: defaultSlotId
+                            });
+                            addedCount++;
+                        }
+                    }
+
+                    renderFullApp(currentTeacher);
+                    alert(`[일괄 등록 완료]\n총 ${addedCount}명의 원생이 ${currentTeacher}T 밑으로 성공적으로 등록되었습니다!\n(시간대 박스 배정은 '원생 관리' 및 '출석부'에서 자유롭게 이동할 수 있습니다.)`);
+
+                } catch (err) {
+                    console.error(err);
+                    alert("엑셀 파일을 읽는 중 오류가 발생했습니다. 올바른 엑셀(.xlsx) 파일인지 확인해주세요.");
+                } finally {
+                    event.target.value = "";
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function deleteManagementStudent(teacherName, index) {
+            if (confirm("정말 이 원생을 목록에서 삭제하시겠습니까?")) {
+                teacherDataStore[teacherName].students.splice(index, 1);
+                renderFullApp(teacherName);
+            }
+        }
+
+        function handleKakaoReservation() {
+            const checkboxes = document.querySelectorAll('.student-checkbox:checked');
+            const message = document.getElementById("kakao-msg-content").value.trim();
+            const date = document.getElementById("reserve-date").value;
+            const time = document.getElementById("reserve-time").value;
+
+            if (checkboxes.length === 0) {
+                alert("카카오톡을 전송할 원생을 최소 1명 이상 체크해주세요.");
+                return;
+            }
+            if (!message) {
+                alert("전송할 메시지 내용을 입력해주세요.");
+                return;
+            }
+            if (!date || !time) {
+                alert("전송 예약 일시를 모두 선택해주세요.");
+                return;
+            }
+
+            let studentNames = [];
+            checkboxes.forEach(cb => {
+                studentNames.push(cb.getAttribute('data-name'));
+            });
+
+            globalReservations.push({
+                id: Date.now(),
+                teacher: getCurrentActiveTeacher(),
+                studentCount: checkboxes.length,
+                students: studentNames,
+                message: message,
+                reserveAt: `${date} ${time}`,
+                status: '대기중'
+            });
+
+            alert(`[전송 예약 완료]\n- 선택된 원생: ${checkboxes.length}명 (${studentNames.join(', ')})\n- 예약 일시: ${date} ${time}`);
+            document.getElementById("kakao-msg-content").value = "";
+            document.getElementById("reserve-date").value = "";
+            document.getElementById("reserve-time").value = "";
+            document.querySelectorAll('.student-checkbox').forEach(cb => cb.checked = false);
+            document.getElementById("select-all-checkbox").checked = false;
+            updateSelectedCount();
+        }
+
+        function renderAdminReservations() {
+            const container = document.getElementById("admin-reservation-list");
+            container.innerHTML = "";
+
+            let targetReservations = globalReservations;
+            if (!isAdminLoggedIn) {
+                const currentT = getCurrentActiveTeacher();
+                targetReservations = globalReservations.filter(r => r.teacher === currentT);
+            }
+
+            if (targetReservations.length === 0) {
+                container.innerHTML = '<div class="text-sm text-zinc-400 py-8 text-center">현재 접수된 전송 예약 내역이 없습니다.</div>';
+                return;
+            }
+
+            targetReservations.forEach(res => {
+                const studentNamesStr = res.students ? res.students.join(', ') : '정보 없음';
+                
+                let adminActionButtons = '';
+                if (isAdminLoggedIn) {
+                    adminActionButtons = `
+                        <button onclick="updateReservationStatus(${res.id}, '전송완료')" class="px-3 py-1 bg-zinc-800 text-white rounded text-xs font-semibold hover:bg-zinc-900 transition">전송 완료로 처리</button>
+                    `;
+                }
+
+                const item = document.createElement("div");
+                item.className = "p-4 rounded-xl border border-zinc-200 bg-zinc-50/50 space-y-2";
+                item.innerHTML = `
+                    <div class="flex justify-between items-center">
+                        <div class="flex items-center space-x-2">
+                            <span class="px-2.5 py-1 bg-primary/10 text-primary rounded-lg text-xs font-bold">${res.teacher}T</span>
+                            <span class="text-xs text-zinc-600">대상: <b>${res.studentCount}명</b> (<span class="text-zinc-500">${studentNamesStr}</span>)</span>
+                            <span class="text-xs text-zinc-400">| ${res.reserveAt}</span>
+                        </div>
+                        <span class="px-2 py-0.5 text-xs rounded font-semibold ${res.status === '전송완료' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}">${res.status}</span>
+                    </div>
+                    <div class="p-3 bg-white rounded-lg border border-zinc-200 text-xs text-zinc-700 whitespace-pre-wrap">${res.message}</div>
+                    <div class="flex justify-end space-x-2 pt-1">
+                        ${adminActionButtons}
+                        <button onclick="deleteReservation(${res.id})" class="px-3 py-1 bg-rose-100 text-rose-700 rounded text-xs font-semibold hover:bg-rose-200 transition">예약 취소</button>
+                    </div>
+                `;
+                container.appendChild(item);
+            });
+        }
+
+        function updateReservationStatus(id, newStatus) {
+            const target = globalReservations.find(r => r.id === id);
+            if(target) { target.status = newStatus; renderAdminReservations(); }
+        }
+
+        function deleteReservation(id) {
+            if(confirm("이 예약 내역을 취소하시겠습니까?")) {
+                globalReservations = globalReservations.filter(r => r.id !== id);
+                renderAdminReservations();
+            }
+        }
+
+        function switchTab(tabName) {
+            const attBtn = document.getElementById("tab-attendance-btn");
+            const mngBtn = document.getElementById("tab-management-btn");
+            const adminResBtn = document.getElementById("tab-admin-reservations-btn");
+            
+            const attSec = document.getElementById("tab-attendance");
+            const mngSec = document.getElementById("tab-management");
+            const adminResSec = document.getElementById("tab-admin-reservations");
+
+            attBtn.className = "px-4 py-2 rounded-lg font-semibold text-zinc-600 hover:bg-zinc-100 transition";
+            mngBtn.className = "px-4 py-2 rounded-lg font-semibold text-zinc-600 hover:bg-zinc-100 transition";
+            if(adminResBtn) adminResBtn.className = "px-4 py-2 rounded-lg font-semibold text-zinc-600 hover:bg-zinc-100 transition";
+            
+            attSec.classList.add("hidden");
+            mngSec.classList.add("hidden");
+            if(adminResSec) adminResSec.classList.add("hidden");
+
+            if (tabName === 'attendance') {
+                attBtn.className = "px-4 py-2 rounded-lg font-semibold bg-primary text-white transition";
+                attSec.classList.remove("hidden");
+                const currentVal = getCurrentActiveTeacher();
+                if(currentVal === "통합출석부") renderIntegratedTimetable();
+                else renderTimetableAndSlots(currentVal);
+            } else if (tabName === 'management') {
+                mngBtn.className = "px-4 py-2 rounded-lg font-semibold bg-primary text-white transition";
+                mngSec.classList.remove("hidden");
+                renderManagementStudents(getCurrentActiveTeacher() === "통합출석부" ? "황성웅" : getCurrentActiveTeacher());
+            } else if (tabName === 'admin-reservations') {
+                adminResBtn.className = "px-4 py-2 rounded-lg font-semibold bg-primary text-white transition";
+                adminResSec.classList.remove("hidden");
+                renderAdminReservations();
+            }
+        }
+
+        function addSlotBoxPrompt() {
+            const currentTeacher = getCurrentActiveTeacher();
+            if (currentTeacher === "통합출석부") return;
+
+            const dayPrompt = prompt("어느 요일에 추가하시겠습니까? (금요일, 토요일, 일요일 중 입력):");
+            if (!dayPrompt) return;
+            let dayKey = dayPrompt.includes("금") ? "friday" : dayPrompt.includes("토") ? "saturday" : dayPrompt.includes("일") ? "sunday" : "";
+            if (!dayKey) { alert("요일을 정확히 입력해주세요."); return; }
+            addSlotBox(dayKey);
+        }
+
+        function addSlotBox(dayKey) {
+            const currentTeacher = getCurrentActiveTeacher();
+            if (currentTeacher === "통합출석부") return;
+
+            const timeLabel = prompt("추가할 반 이름 및 시간대를 입력하세요:");
+            if (!timeLabel) return;
+
+            if (!teacherDataStore[currentTeacher]) initDefaultTeacherData(currentTeacher);
+
+            const newId = 'slot-' + dayKey + '-' + Date.now();
+            teacherDataStore[currentTeacher].slots[dayKey].push({ id: newId, title: timeLabel });
+            renderFullApp(currentTeacher);
+        }
+
+        function editSlotBox(teacherName, dayKey, slotId) {
+            const data = teacherDataStore[teacherName];
+            const slot = data.slots[dayKey].find(s => s.id === slotId);
+            if (!slot) return;
+
+            const action = prompt(`[${slot.title}] 시간대 박스 관리\n원하시는 작업을 입력하세요:\n1. 이름 수정\n2. 박스 삭제`, "1");
+            
+            if (action === "1" || action === "이름 수정") {
+                const newTitle = prompt("변경할 반 이름 및 시간대를 입력하세요:", slot.title);
+                if (newTitle && newTitle.trim() !== "") {
+                    slot.title = newTitle.trim();
+                    renderFullApp(teacherName);
+                }
+            } else if (action === "2" || action === "박스 삭제") {
+                if (confirm(`정말 "${slot.title}" 박스를 삭제하시겠습니까?\n포함된 학생들도 함께 해제됩니다.`)) {
+                    data.slots[dayKey] = data.slots[dayKey].filter(s => s.id !== slotId);
+                    data.students = data.students.filter(s => s.slotId !== slotId);
+                    renderFullApp(teacherName);
+                }
+            }
+        }
+    </script>
+</body>
+</html>
