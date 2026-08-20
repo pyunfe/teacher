@@ -4,15 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>국성티처</title>
-    <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Pretendard 폰트 -->
     <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css" rel="stylesheet"/>
-    <!-- SortableJS (드래그 앤 드롭 라이브러리) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
-    <!-- SheetJS (엑셀 파일 파싱 라이브러리) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <!-- Supabase JS SDK -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script>
         tailwind.config = {
@@ -28,6 +23,7 @@
     </script>
     <style>
         body { font-family: 'Pretendard Variable', sans-serif; }
+        main { zoom: 1.25; }
         .student-block { cursor: grab; transition: all 0.15s; }
         .student-block:active { cursor: grabbing; }
         .sortable-ghost { opacity: 0.4; background: #e5e7eb !important; }
@@ -39,7 +35,6 @@
 </head>
 <body class="bg-[#F7F7F5] text-[#1c1b1b]">
 
-    <!-- 1. 로그인 화면 -->
     <div id="login-screen" class="flex items-center justify-center min-h-screen bg-[#F7F7F5]">
         <div class="bg-white p-8 rounded-2xl shadow-sm border border-zinc-200 w-96 text-center">
             <h1 class="text-2xl font-bold text-primary mb-2 tracking-tight">국성티처</h1>
@@ -55,15 +50,12 @@
         </div>
     </div>
 
-    <!-- 2. 메인 앱 화면 -->
     <div id="app-screen" class="hidden min-h-screen flex flex-col">
-        <!-- 상단 내비게이션 바 -->
         <header class="bg-white border-b border-zinc-200 px-6 py-4 flex justify-between items-center sticky top-0 z-40">
             <div class="flex items-center space-x-4">
                 <h1 class="text-xl font-bold text-primary tracking-tighter">국성티처</h1>
                 <span id="user-badge" class="px-3 py-1 bg-[#802020]/10 text-primary rounded-full text-sm font-medium">강사 모드</span>
                 
-                <!-- 관리자용 강사/통합 선택 -->
                 <div id="admin-selector-wrapper" class="hidden flex items-center space-x-2">
                     <label class="text-sm text-zinc-600">보기 모드:</label>
                     <select id="teacher-select" onchange="changeTeacher(this.value)" class="border border-zinc-300 rounded-lg px-3 py-1 text-sm bg-zinc-50 focus:outline-none focus:ring-1 focus:ring-primary">
@@ -89,7 +81,6 @@
                 </div>
             </div>
 
-            <!-- 탭 메뉴 & 로그아웃 -->
             <div class="flex items-center space-x-6">
                 <nav class="space-x-2">
                     <button onclick="switchTab('attendance')" id="tab-attendance-btn" class="px-4 py-2 rounded-lg font-semibold bg-primary text-white transition">출석부</button>
@@ -100,10 +91,8 @@
             </div>
         </header>
 
-        <!-- 메인 콘텐츠 영역 -->
         <main class="flex-1 p-6 max-w-7xl mx-auto w-full">
             
-            <!-- ① 출석부 탭 -->
             <section id="tab-attendance" class="space-y-6">
                 <div class="flex justify-between items-center bg-white p-4 rounded-2xl shadow-sm border border-zinc-200">
                     <div>
@@ -113,8 +102,7 @@
                         <div class="flex items-center space-x-2">
                             <label class="text-xs font-semibold text-zinc-600">조회 주차:</label>
                             <select id="week-select" onchange="changeWeek(this.value)" class="border border-zinc-300 rounded-xl px-3 py-1.5 text-sm bg-zinc-50 focus:outline-none focus:ring-1 focus:ring-primary font-bold text-primary">
-                                <!-- 동적으로 생성됨 -->
-                            </select>
+                                </select>
                         </div>
                         <div id="slot-add-btn-wrapper">
                             <button onclick="addSlotBoxPrompt()" class="bg-zinc-800 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-zinc-900 transition">
@@ -124,10 +112,8 @@
                     </div>
                 </div>
 
-                <!-- 전체 출석부 컨테이너 (금, 토, 일 요일별 섹션) -->
                 <div class="space-y-8" id="timetable-container">
                     
-                    <!-- [금요일 섹션] -->
                     <div class="bg-white p-5 rounded-2xl shadow-sm border border-zinc-200">
                         <div class="flex justify-between items-center mb-4 pb-2 border-b border-zinc-100">
                             <h3 class="text-primary font-extrabold text-lg" id="label-friday">금요일</h3>
@@ -136,7 +122,6 @@
                         <div id="row-friday" class="w-full"></div>
                     </div>
 
-                    <!-- [토요일 섹션] -->
                     <div class="bg-white p-5 rounded-2xl shadow-sm border border-zinc-200">
                         <div class="flex justify-between items-center mb-4 pb-2 border-b border-zinc-100">
                             <h3 class="text-primary font-extrabold text-lg" id="label-saturday">토요일</h3>
@@ -145,7 +130,6 @@
                         <div id="row-saturday" class="w-full"></div>
                     </div>
 
-                    <!-- [일요일 섹션] -->
                     <div class="bg-white p-5 rounded-2xl shadow-sm border border-zinc-200">
                         <div class="flex justify-between items-center mb-4 pb-2 border-b border-zinc-100">
                             <h3 class="text-primary font-extrabold text-lg" id="label-sunday">일요일</h3>
@@ -157,7 +141,6 @@
                 </div>
             </section>
 
-            <!-- ② 원생 관리 탭 -->
             <section id="tab-management" class="hidden space-y-6">
                 <div class="flex justify-between items-center">
                     <div>
@@ -207,7 +190,6 @@
                 </div>
             </section>
 
-            <!-- ③ 전송 예약 관리 탭 -->
             <section id="tab-admin-reservations" class="hidden space-y-6">
                 <div>
                     <h2 class="text-xl font-bold text-zinc-800" id="admin-res-page-title">카카오톡 전송 예약 관리</h2>
@@ -221,15 +203,12 @@
         </main>
     </div>
 
-    <!-- 자바스크립트 및 Supabase 연동 로직 -->
     <script>
-        // ★ [중요] 본인의 Supabase 프로젝트 URL과 Anon Key를 아래에 정확히 입력해주세요!
         var SUPABASE_URL = 'https://haaiwbjdlqwrfrvsurxi.supabase.co'; 
         var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhhYWl3YmpkbHF3cmZydnN1cnhpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY1MTQ1NjQsImV4cCI6MjEwMjA5MDU2NH0.hiMuLbrgkF2W_-PR5dfwmqI2TAOLi3yJv25_iCMovFE'; 
         
         var supabaseClient = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
 
-        // ★ 변수들을 함수보다 먼저 선언하여 ReferenceError 원천 차단
         var isAdminLoggedIn = false;
         var currentSelectedWeek = "";
         var teacherDataStore = {};
@@ -537,81 +516,81 @@
             saveDataToSupabase('attendanceRecords', attendanceRecords);
         }
 
+        // ★ [수정 완료] 선생님 타이틀 아래 수업 카드가 세로(Column)로 정렬되는 통합 출석부
         function renderIntegratedTimetable() {
             updateSectionDateLabels();
             ['friday', 'saturday', 'sunday'].forEach(day => {
                 const rowContainer = document.getElementById(`row-${day}`);
                 rowContainer.innerHTML = "";
-                
-                let columnsHtml = `<div class="horizontal-scroll-container overflow-x-auto pb-3"><div class="flex space-x-4 items-start min-max-content">`;
 
-                let hasAnySlot = false;
+                let hasAnySlots = false;
+                let columnsHtml = `<div class="horizontal-scroll-container overflow-x-auto pb-3"><div class="flex space-x-4 items-start min-max-content">`;
 
                 orderedTeacherNames.forEach(tName => {
                     if (!teacherDataStore[tName]) initDefaultTeacherData(tName);
                     const tData = teacherDataStore[tName];
                     const daySlots = getSortedSlots(tData.slots[day] || []);
 
-                    if (daySlots.length > 0) {
-                        hasAnySlot = true;
-                    }
+                    if (daySlots.length === 0) return; // 수업이 없는 선생님은 스킵
+                    hasAnySlots = true;
 
-                    columnsHtml += `<div class="w-80 shrink-0 bg-zinc-50/80 p-4 rounded-xl border border-zinc-200 self-start space-y-4">`;
-                    columnsHtml += `<div class="pb-2 border-b-2 border-primary"><span class="font-extrabold text-primary text-sm">${tName}T</span></div>`;
-                    
-                    if (daySlots.length === 0) {
-                        columnsHtml += `<div class="text-[11px] text-zinc-400 py-2 text-center">등록된 수업 없음</div>`;
-                    } else {
-                        daySlots.forEach(slot => {
-                            const slotStudents = tData.students.filter(s => s.slotId === slot.id);
-                            let studentsHtml = "";
+                    let teacherSlotsCardsHtml = "";
 
-                            slotStudents.forEach(s => {
-                                const rec = getStudentRecord(s.name);
-                                const isAtt = rec.status === '출석';
-                                
-                                const attBtnClass = isAtt ? "bg-[#dcfce7] text-[#15803d] font-bold" : "bg-zinc-100 text-zinc-500 font-semibold";
-                                const absBtnClass = !isAtt ? "bg-[#fee2e2] text-[#b91c1c] font-bold" : "bg-zinc-100 text-zinc-500 font-semibold";
+                    daySlots.forEach(slot => {
+                        const slotStudents = tData.students.filter(s => s.slotId === slot.id);
+                        let studentsHtml = "";
 
-                                studentsHtml += `
-                                    <div class="student-block flex items-center justify-between p-2 rounded-lg border border-zinc-200 bg-white shadow-sm hover:border-primary gap-1.5" data-student-name="${s.name}">
-                                        <div class="w-22 shrink-0 truncate">
-                                            <span class="font-bold text-xs text-zinc-900">${s.name}</span>
-                                            <span class="text-[10px] text-zinc-500">(${s.school})</span>
-                                        </div>
-                                        <div class="flex items-center space-x-1 shrink-0 justify-center">
-                                            <button onclick="handleStatusClick('${s.name}', '출석', this)" class="px-2 py-0.5 text-[11px] rounded ${attBtnClass} status-btn">출석</button>
-                                            <button onclick="handleStatusClick('${s.name}', '결석', this)" class="px-2 py-0.5 text-[11px] rounded ${absBtnClass} status-btn">결석</button>
-                                        </div>
-                                        <div class="w-20 shrink-0">
-                                            <input type="text" placeholder="비고" value="${rec.memo}" 
-                                                oninput="updateStudentMemo('${s.name}', this.value)"
-                                                class="w-full text-[11px] border border-zinc-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary text-zinc-700 bg-white">
-                                        </div>
+                        slotStudents.forEach(s => {
+                            const rec = getStudentRecord(s.name);
+                            const isAtt = rec.status === '출석';
+
+                            const attBtnClass = isAtt ? "bg-[#dcfce7] text-[#15803d] font-bold" : "bg-zinc-100 text-zinc-500 font-semibold";
+                            const absBtnClass = !isAtt ? "bg-[#fee2e2] text-[#b91c1c] font-bold" : "bg-zinc-100 text-zinc-500 font-semibold";
+
+                            studentsHtml += `
+                                <div class="student-block flex items-center p-2 rounded-lg border border-zinc-200 bg-white shadow-sm hover:border-primary" data-student-name="${s.name}">
+                                    <div class="w-24 shrink-0 truncate mr-1.5">
+                                        <span class="font-bold text-xs text-zinc-900">${s.name}</span>
+                                        <span class="text-[10px] text-zinc-500">(${s.school})</span>
                                     </div>
-                                `;
-                            });
-
-                            if (studentsHtml === "") {
-                                studentsHtml = '<div class="text-[11px] text-zinc-400 text-center py-2">학생 없음</div>';
-                            }
-
-                            columnsHtml += `
-                                <div class="bg-white p-3 rounded-xl border border-zinc-200 shadow-sm">
-                                    <div class="mb-2 pb-1 border-b border-zinc-100 truncate">
-                                        <span class="text-xs font-bold text-zinc-700">${slot.title}</span>
+                                    <div class="flex items-center space-x-1 shrink-0 mr-1.5">
+                                        <button onclick="handleStatusClick('${s.name}', '출석', this)" class="px-2 py-0.5 text-[11px] rounded ${attBtnClass} status-btn">출석</button>
+                                        <button onclick="handleStatusClick('${s.name}', '결석', this)" class="px-2 py-0.5 text-[11px] rounded ${absBtnClass} status-btn">결석</button>
                                     </div>
-                                    <div class="space-y-1.5">${studentsHtml}</div>
+                                    <div class="flex-1 min-w-0">
+                                        <input type="text" placeholder="비고" value="${rec.memo}" 
+                                            oninput="updateStudentMemo('${s.name}', this.value)"
+                                            class="w-full text-[11px] border border-zinc-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary text-zinc-700 bg-white">
+                                    </div>
                                 </div>
                             `;
                         });
-                    }
-                    columnsHtml += `</div>`;
+
+                        if (studentsHtml === "") {
+                            studentsHtml = '<div class="text-[11px] text-zinc-400 text-center py-2">학생 없음</div>';
+                        }
+
+                        teacherSlotsCardsHtml += `
+                            <div class="w-full bg-zinc-50/50 p-4 rounded-xl border border-zinc-200 self-start">
+                                <div class="flex justify-between items-center mb-3">
+                                    <span class="text-xs font-bold text-zinc-700 truncate"><span class="text-primary">[${tName}T]</span> ${slot.title}</span>
+                                </div>
+                                <div class="space-y-1.5">${studentsHtml}</div>
+                            </div>
+                        `;
+                    });
+
+                    // 강사 1명의 세로 칼럼 영역 (요일 박스에 3칸이 맞게 최대 너비 고정, 4번째부터는 가로 스크롤, 별도 헤더 박스 없이 수업 카드만 시간순 세로 나열)
+                    columnsHtml += `
+                        <div class="flex-1 min-w-[300px] max-w-[calc(33.333%-0.6667rem)] self-start space-y-3">
+                            ${teacherSlotsCardsHtml}
+                        </div>
+                    `;
                 });
 
                 columnsHtml += `</div></div>`;
 
-                if (!hasAnySlot) {
+                if (!hasAnySlots) {
                     rowContainer.innerHTML = '<div class="text-xs text-zinc-400 py-4 text-center w-full">등록된 수업이 없습니다.</div>';
                 } else {
                     rowContainer.innerHTML = columnsHtml;
@@ -647,16 +626,16 @@
                         const absBtnClass = !isAtt ? "bg-[#fee2e2] text-[#b91c1c] font-bold" : "bg-zinc-100 text-zinc-500 font-semibold";
 
                         studentsHtml += `
-                            <div class="student-block flex items-center justify-between p-2 rounded-lg border border-zinc-200 bg-white shadow-sm hover:border-primary gap-1.5" data-student-name="${s.name}">
-                                <div class="w-22 shrink-0 truncate">
+                            <div class="student-block flex items-center p-2 rounded-lg border border-zinc-200 bg-white shadow-sm hover:border-primary" data-student-name="${s.name}">
+                                <div class="w-24 shrink-0 truncate mr-1.5">
                                     <span class="font-bold text-xs text-zinc-900">${s.name}</span>
                                     <span class="text-[10px] text-zinc-500">(${s.school})</span>
                                 </div>
-                                <div class="flex items-center space-x-1 shrink-0 justify-center">
+                                <div class="flex items-center space-x-1 shrink-0 mr-1.5">
                                     <button onclick="handleStatusClick('${s.name}', '출석', this)" class="px-2 py-0.5 text-[11px] rounded ${attBtnClass} status-btn">출석</button>
                                     <button onclick="handleStatusClick('${s.name}', '결석', this)" class="px-2 py-0.5 text-[11px] rounded ${absBtnClass} status-btn">결석</button>
                                 </div>
-                                <div class="w-20 shrink-0">
+                                <div class="flex-1 min-w-0">
                                     <input type="text" placeholder="비고" value="${rec.memo}" 
                                         oninput="updateStudentMemo('${s.name}', this.value)"
                                         class="w-full text-[11px] border border-zinc-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary text-zinc-700 bg-white">
@@ -666,7 +645,7 @@
                     });
 
                     slotsHtml += `
-                        <div class="w-80 shrink-0 bg-zinc-50/50 p-4 rounded-xl border border-zinc-200 self-start">
+                        <div class="flex-1 min-w-[300px] bg-zinc-50/50 p-4 rounded-xl border border-zinc-200 self-start">
                             <div class="flex justify-between items-center mb-3">
                                 <span class="text-xs font-bold text-zinc-700 truncate">${slot.title}</span>
                                 <button onclick="editSlotBox('${teacherName}', '${day}', '${slot.id}')" class="text-[10px] text-zinc-500 hover:text-primary font-semibold shrink-0 ml-2 bg-white px-2 py-1 rounded border border-zinc-200">수정 / 삭제</button>
