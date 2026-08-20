@@ -250,9 +250,43 @@
             "고광준", "이영찬", "오세현"
         ];
 
-        const SUPABASE_URL = 'YOUR_SUPABASE_URL'; 
-        const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY'; 
+        const SUPABASE_URL = 'https://haaiwbjdlqwrfrvsurxi.supabase.co'; 
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhhYWl3YmpkbHF3cmZydnN1cnhpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY1MTQ1NjQsImV4cCI6MjEwMjA5MDU2NH0.hiMuLbrgkF2W_-PR5dfwmqI2TAOLi3yJv25_iCMovFE'; 
         const supabaseClient = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+
+        // Supabase DB 데이터 동기화 함수들
+        async function loadDataFromSupabase() {
+            if (!supabaseClient) return;
+            try {
+                const { data, error } = await supabaseClient.from('app_data').select('*');
+                if (error) {
+                    console.error("Supabase 로드 오류:", error);
+                    return;
+                }
+                if (data && data.length > 0) {
+                    data.forEach(row => {
+                        if (row.id === 'teacherDataStore') teacherDataStore = row.data;
+                        if (row.id === 'attendanceRecords') attendanceRecords = row.data;
+                        if (row.id === 'globalReservations') globalReservations = row.data;
+                    });
+                }
+            } catch (err) {
+                console.error("Supabase 데이터 연결 실패:", err);
+            }
+        }
+
+        async function saveDataToSupabase(key, payload) {
+            if (!supabaseClient) return;
+            try {
+                await supabaseClient.from('app_data').upsert({
+                    id: key,
+                    data: payload,
+                    updated_at: new Date()
+                });
+            } catch (err) {
+                console.error("Supabase 저장 오류:", err);
+            }
+        }
 
         function initWeeks() {
             const weekSelect = document.getElementById("week-select");
@@ -306,18 +340,21 @@
             updateSectionDateLabels();
         }
 
-        initWeeks();
-        window.addEventListener("DOMContentLoaded", () => {
+        window.addEventListener("DOMContentLoaded", async () => {
             initWeeks();
+            await loadDataFromSupabase();
             initDragAndDrop();
         });
 
-        function handleLogin() {
+        async function handleLogin() {
             const inputVal = document.getElementById("login-input").value.trim();
             if (!inputVal) {
                 alert("비밀번호를 입력해주세요.");
                 return;
             }
+
+            // 로그인 전 최신 DB 데이터 한번 더 동기화
+            await loadDataFromSupabase();
 
             const adminResBtn = document.getElementById("tab-admin-reservations-btn");
             initWeeks();
@@ -409,6 +446,7 @@
                                     studentObj.slotId = newSlotId;
                                     sortStudentsAlphabetically(currentTeacher);
                                     renderFullApp(currentTeacher);
+                                    saveDataToSupabase('teacherDataStore', teacherDataStore);
                                 }
                             }
                         }
@@ -474,11 +512,13 @@
         function updateStudentStatus(studentName, status) {
             const rec = getStudentRecord(studentName);
             rec.status = status;
+            saveDataToSupabase('attendanceRecords', attendanceRecords);
         }
 
         function updateStudentMemo(studentName, memoText) {
             const rec = getStudentRecord(studentName);
             rec.memo = memoText;
+            saveDataToSupabase('attendanceRecords', attendanceRecords);
         }
 
         function renderIntegratedTimetable() {
@@ -605,7 +645,6 @@
                         `;
                     });
 
-                    // [수정 포인트] max-h 및 overflow 제거 -> 무한 확장형 구조
                     slotsHtml += `
                         <div class="w-80 shrink-0 bg-zinc-50/50 p-4 rounded-xl border border-zinc-200 self-start">
                             <div class="flex justify-between items-center mb-3">
@@ -736,6 +775,7 @@
 
             data.students.push({ name, school, slotId: allSlots[choiceIdx].id });
             renderFullApp(currentTeacher);
+            saveDataToSupabase('teacherDataStore', teacherDataStore);
             alert(`"${name}" 원생이 성공적으로 등록되었습니다.`);
         }
 
@@ -776,6 +816,7 @@
                 student.name = newName.trim();
                 student.school = newSchool.trim();
                 renderFullApp(teacherName);
+                saveDataToSupabase('teacherDataStore', teacherDataStore);
                 return;
             }
 
@@ -794,6 +835,7 @@
                 student.name = newName.trim();
                 student.school = newSchool.trim();
                 renderFullApp(teacherName);
+                saveDataToSupabase('teacherDataStore', teacherDataStore);
                 return;
             }
 
@@ -802,6 +844,7 @@
             student.slotId = allSlots[choiceIdx].id;
 
             renderFullApp(teacherName);
+            saveDataToSupabase('teacherDataStore', teacherDataStore);
             alert("원생 정보가 성공적으로 수정되었습니다!");
         }
 
@@ -890,11 +933,12 @@
                     }
 
                     renderFullApp(currentTeacher);
-                    alert(`[일괄 등록 완료]\n총 ${addedCount}명의 원생이 ${currentTeacher}T 밑으로 성공적으로 등록되었습니다!\n(시간대 박스 배정은 '원생 관리' 및 '출석부'에서 자유롭게 이동할 수 있습니다.)`);
+                    saveDataToSupabase('teacherDataStore', teacherDataStore);
+                    alert(`[일괄 등록 완료]\n총 ${addedCount}명의 원생이 ${currentTeacher}T 밑으로 성공적으로 등록되었습니다!`);
 
                 } catch (err) {
                     console.error(err);
-                    alert("엑셀 파일을 읽는 중 오류가 발생했습니다. 올바른 엑셀(.xlsx) 파일인지 확인해주세요.");
+                    alert("엑셀 파일을 읽는 중 오류가 발생했습니다.");
                 } finally {
                     event.target.value = "";
                 }
@@ -906,6 +950,7 @@
             if (confirm("정말 이 원생을 목록에서 삭제하시겠습니까?")) {
                 teacherDataStore[teacherName].students.splice(index, 1);
                 renderFullApp(teacherName);
+                saveDataToSupabase('teacherDataStore', teacherDataStore);
             }
         }
 
@@ -942,6 +987,8 @@
                 reserveAt: `${date} ${time}`,
                 status: '대기중'
             });
+
+            saveDataToSupabase('globalReservations', globalReservations);
 
             alert(`[전송 예약 완료]\n- 선택된 원생: ${checkboxes.length}명 (${studentNames.join(', ')})\n- 예약 일시: ${date} ${time}`);
             document.getElementById("kakao-msg-content").value = "";
@@ -1000,13 +1047,18 @@
 
         function updateReservationStatus(id, newStatus) {
             const target = globalReservations.find(r => r.id === id);
-            if(target) { target.status = newStatus; renderAdminReservations(); }
+            if(target) { 
+                target.status = newStatus; 
+                renderAdminReservations(); 
+                saveDataToSupabase('globalReservations', globalReservations);
+            }
         }
 
         function deleteReservation(id) {
             if(confirm("이 예약 내역을 취소하시겠습니까?")) {
                 globalReservations = globalReservations.filter(r => r.id !== id);
                 renderAdminReservations();
+                saveDataToSupabase('globalReservations', globalReservations);
             }
         }
 
@@ -1067,6 +1119,7 @@
             const newId = 'slot-' + dayKey + '-' + Date.now();
             teacherDataStore[currentTeacher].slots[dayKey].push({ id: newId, title: timeLabel });
             renderFullApp(currentTeacher);
+            saveDataToSupabase('teacherDataStore', teacherDataStore);
         }
 
         function editSlotBox(teacherName, dayKey, slotId) {
@@ -1081,12 +1134,14 @@
                 if (newTitle && newTitle.trim() !== "") {
                     slot.title = newTitle.trim();
                     renderFullApp(teacherName);
+                    saveDataToSupabase('teacherDataStore', teacherDataStore);
                 }
             } else if (action === "2" || action === "박스 삭제") {
                 if (confirm(`정말 "${slot.title}" 박스를 삭제하시겠습니까?\n포함된 학생들도 함께 해제됩니다.`)) {
                     data.slots[dayKey] = data.slots[dayKey].filter(s => s.id !== slotId);
                     data.students = data.students.filter(s => s.slotId !== slotId);
                     renderFullApp(teacherName);
+                    saveDataToSupabase('teacherDataStore', teacherDataStore);
                 }
             }
         }
