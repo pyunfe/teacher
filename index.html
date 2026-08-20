@@ -133,9 +133,7 @@
                             <h3 class="text-primary font-extrabold text-lg" id="label-friday">금요일</h3>
                             <button id="btn-add-friday" onclick="addSlotBox('friday')" class="text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-700 px-3 py-1.5 rounded-lg font-semibold transition">+ 시간대 박스 추가</button>
                         </div>
-                        <div class="horizontal-scroll-container overflow-x-auto pb-3">
-                            <div class="flex space-x-4 items-start min-max-content" id="row-friday"></div>
-                        </div>
+                        <div id="row-friday" class="w-full"></div>
                     </div>
 
                     <!-- [토요일 섹션] -->
@@ -144,9 +142,7 @@
                             <h3 class="text-primary font-extrabold text-lg" id="label-saturday">토요일</h3>
                             <button id="btn-add-saturday" onclick="addSlotBox('saturday')" class="text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-700 px-3 py-1.5 rounded-lg font-semibold transition">+ 시간대 박스 추가</button>
                         </div>
-                        <div class="horizontal-scroll-container overflow-x-auto pb-3">
-                            <div class="flex space-x-4 items-start min-max-content" id="row-saturday"></div>
-                        </div>
+                        <div id="row-saturday" class="w-full"></div>
                     </div>
 
                     <!-- [일요일 섹션] -->
@@ -155,9 +151,7 @@
                             <h3 class="text-primary font-extrabold text-lg" id="label-sunday">일요일</h3>
                             <button id="btn-add-sunday" onclick="addSlotBox('sunday')" class="text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-700 px-3 py-1.5 rounded-lg font-semibold transition">+ 시간대 박스 추가</button>
                         </div>
-                        <div class="horizontal-scroll-container overflow-x-auto pb-3">
-                            <div class="flex space-x-4 items-start min-max-content" id="row-sunday"></div>
-                        </div>
+                        <div id="row-sunday" class="w-full"></div>
                     </div>
 
                 </div>
@@ -250,11 +244,10 @@
             "고광준", "이영찬", "오세현"
         ];
 
-        const SUPABASE_URL = 'https://haaiwbjdlqwrfrvsurxi.supabase.co'; 
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhhYWl3YmpkbHF3cmZydnN1cnhpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY1MTQ1NjQsImV4cCI6MjEwMjA5MDU2NH0.hiMuLbrgkF2W_-PR5dfwmqI2TAOLi3yJv25_iCMovFE'; 
+        const SUPABASE_URL = 'YOUR_SUPABASE_URL'; 
+        const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY'; 
         const supabaseClient = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
 
-        // Supabase DB 데이터 동기화 함수들
         async function loadDataFromSupabase() {
             if (!supabaseClient) return;
             try {
@@ -353,7 +346,6 @@
                 return;
             }
 
-            // 로그인 전 최신 DB 데이터 한번 더 동기화
             await loadDataFromSupabase();
 
             const adminResBtn = document.getElementById("tab-admin-reservations-btn");
@@ -486,6 +478,28 @@
             }
         }
 
+        // 텍스트에서 시간(오전/오후 및 숫자)을 추출하여 24시간 기준으로 변환해 주는 정렬용 파서 함수
+        function parseSlotTime(title) {
+            if (!title) return 9999;
+            let match = title.match(/(오전|오후)\s*(\d{1,2})시/);
+            if (!match) {
+                match = title.match(/(\d{1,2})시/);
+                if (!match) return 9999;
+                let hour = parseInt(match[1], 10);
+                return hour < 9 ? hour + 12 : hour; // 기본적으로 오후로 간주하거나 숫자로 정렬
+            }
+            let isPm = match[1] === '오후';
+            let hour = parseInt(match[2], 10);
+            if (isPm && hour < 12) hour += 12;
+            if (!isPm && hour === 12) hour = 0;
+            return hour;
+        }
+
+        function getSortedSlots(slotsArray) {
+            if (!slotsArray) return [];
+            return [...slotsArray].sort((a, b) => parseSlotTime(a.title) - parseSlotTime(b.title));
+        }
+
         function initDefaultTeacherData(teacherName) {
             teacherDataStore[teacherName] = {
                 slots: { friday: [], saturday: [], sunday: [] },
@@ -521,84 +535,91 @@
             saveDataToSupabase('attendanceRecords', attendanceRecords);
         }
 
+        // [통합 출석부 렌더링] 선생님별 열(Column) 가로 배치 + 각 선생님의 시간표는 위에서 아래(세로) 배치 (시간순 정렬 적용)
         function renderIntegratedTimetable() {
             updateSectionDateLabels();
             ['friday', 'saturday', 'sunday'].forEach(day => {
                 const rowContainer = document.getElementById(`row-${day}`);
                 rowContainer.innerHTML = "";
                 
-                let allSlotsForDay = [];
+                let columnsHtml = `<div class="horizontal-scroll-container overflow-x-auto pb-3"><div class="flex space-x-4 items-start min-max-content">`;
+
+                let hasAnySlot = false;
 
                 orderedTeacherNames.forEach(tName => {
                     if (!teacherDataStore[tName]) initDefaultTeacherData(tName);
                     const tData = teacherDataStore[tName];
-                    const daySlots = tData.slots[day] || [];
+                    const daySlots = getSortedSlots(tData.slots[day] || []);
 
-                    daySlots.forEach(slot => {
-                        allSlotsForDay.push({
-                            teacherName: tName,
-                            slot: slot,
-                            students: tData.students.filter(s => s.slotId === slot.id)
-                        });
-                    });
-                });
-
-                if (allSlotsForDay.length === 0) {
-                    rowContainer.innerHTML = '<div class="text-xs text-zinc-400 py-4 text-center w-full">등록된 수업이 없습니다.</div>';
-                    return;
-                }
-
-                let slotsHtml = "";
-                allSlotsForDay.forEach(item => {
-                    let studentsHtml = "";
-
-                    item.students.forEach(s => {
-                        const rec = getStudentRecord(s.name);
-                        const isAtt = rec.status === '출석';
-                        
-                        const attBtnClass = isAtt ? "bg-[#dcfce7] text-[#15803d] font-bold" : "bg-zinc-100 text-zinc-500 font-semibold";
-                        const absBtnClass = !isAtt ? "bg-[#fee2e2] text-[#b91c1c] font-bold" : "bg-zinc-100 text-zinc-500 font-semibold";
-
-                        studentsHtml += `
-                            <div class="student-block flex items-center justify-between p-2 rounded-lg border border-zinc-200 bg-white shadow-sm hover:border-primary gap-1.5" data-student-name="${s.name}">
-                                <div class="w-22 shrink-0 truncate">
-                                    <span class="font-bold text-xs text-zinc-900">${s.name}</span>
-                                    <span class="text-[10px] text-zinc-500">(${s.school})</span>
-                                </div>
-                                <div class="flex items-center space-x-1 shrink-0 justify-center">
-                                    <button onclick="handleStatusClick('${s.name}', '출석', this)" class="px-2 py-0.5 text-[11px] rounded ${attBtnClass} status-btn">출석</button>
-                                    <button onclick="handleStatusClick('${s.name}', '결석', this)" class="px-2 py-0.5 text-[11px] rounded ${absBtnClass} status-btn">결석</button>
-                                </div>
-                                <div class="w-20 shrink-0">
-                                    <input type="text" placeholder="비고" value="${rec.memo}" 
-                                        oninput="updateStudentMemo('${s.name}', this.value)"
-                                        class="w-full text-[11px] border border-zinc-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary text-zinc-700 bg-white">
-                                </div>
-                            </div>
-                        `;
-                    });
-
-                    if (studentsHtml === "") {
-                        studentsHtml = '<div class="text-[11px] text-zinc-400 text-center py-2">학생 없음</div>';
+                    if (daySlots.length > 0) {
+                        hasAnySlot = true;
                     }
 
-                    slotsHtml += `
-                        <div class="w-80 shrink-0 bg-zinc-50/50 p-4 rounded-xl border border-zinc-200 self-start">
-                            <div class="flex justify-between items-center mb-3 pb-2 border-b border-zinc-200">
-                                <div class="truncate">
-                                    <span class="text-xs font-extrabold text-primary mr-1.5">[${item.teacherName}T]</span>
-                                    <span class="text-xs font-bold text-zinc-700">${item.slot.title}</span>
+                    // 선생님 1명당 하나의 세로 컬럼 박스 생성
+                    columnsHtml += `<div class="w-80 shrink-0 bg-zinc-50/80 p-4 rounded-xl border border-zinc-200 self-start space-y-4">`;
+                    columnsHtml += `<div class="pb-2 border-b-2 border-primary"><span class="font-extrabold text-primary text-sm">${tName}T</span></div>`;
+                    
+                    if (daySlots.length === 0) {
+                        columnsHtml += `<div class="text-[11px] text-zinc-400 py-2 text-center">등록된 수업 없음</div>`;
+                    } else {
+                        daySlots.forEach(slot => {
+                            const slotStudents = tData.students.filter(s => s.slotId === slot.id);
+                            let studentsHtml = "";
+
+                            slotStudents.forEach(s => {
+                                const rec = getStudentRecord(s.name);
+                                const isAtt = rec.status === '출석';
+                                
+                                const attBtnClass = isAtt ? "bg-[#dcfce7] text-[#15803d] font-bold" : "bg-zinc-100 text-zinc-500 font-semibold";
+                                const absBtnClass = !isAtt ? "bg-[#fee2e2] text-[#b91c1c] font-bold" : "bg-zinc-100 text-zinc-500 font-semibold";
+
+                                studentsHtml += `
+                                    <div class="student-block flex items-center justify-between p-2 rounded-lg border border-zinc-200 bg-white shadow-sm hover:border-primary gap-1.5" data-student-name="${s.name}">
+                                        <div class="w-22 shrink-0 truncate">
+                                            <span class="font-bold text-xs text-zinc-900">${s.name}</span>
+                                            <span class="text-[10px] text-zinc-500">(${s.school})</span>
+                                        </div>
+                                        <div class="flex items-center space-x-1 shrink-0 justify-center">
+                                            <button onclick="handleStatusClick('${s.name}', '출석', this)" class="px-2 py-0.5 text-[11px] rounded ${attBtnClass} status-btn">출석</button>
+                                            <button onclick="handleStatusClick('${s.name}', '결석', this)" class="px-2 py-0.5 text-[11px] rounded ${absBtnClass} status-btn">결석</button>
+                                        </div>
+                                        <div class="w-20 shrink-0">
+                                            <input type="text" placeholder="비고" value="${rec.memo}" 
+                                                oninput="updateStudentMemo('${s.name}', this.value)"
+                                                class="w-full text-[11px] border border-zinc-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary text-zinc-700 bg-white">
+                                        </div>
+                                    </div>
+                                `;
+                            });
+
+                            if (studentsHtml === "") {
+                                studentsHtml = '<div class="text-[11px] text-zinc-400 text-center py-2">학생 없음</div>';
+                            }
+
+                            columnsHtml += `
+                                <div class="bg-white p-3 rounded-xl border border-zinc-200 shadow-sm">
+                                    <div class="mb-2 pb-1 border-b border-zinc-100 truncate">
+                                        <span class="text-xs font-bold text-zinc-700">${slot.title}</span>
+                                    </div>
+                                    <div class="space-y-1.5">${studentsHtml}</div>
                                 </div>
-                            </div>
-                            <div class="space-y-1.5">${studentsHtml}</div>
-                        </div>
-                    `;
+                            `;
+                        });
+                    }
+                    columnsHtml += `</div>`;
                 });
 
-                rowContainer.innerHTML = slotsHtml;
+                columnsHtml += `</div></div>`;
+
+                if (!hasAnySlot) {
+                    rowContainer.innerHTML = '<div class="text-xs text-zinc-400 py-4 text-center w-full">등록된 수업이 없습니다.</div>';
+                } else {
+                    rowContainer.innerHTML = columnsHtml;
+                }
             });
         }
 
+        // [개인 출석부 렌더링] 시간 순서대로 읽어서 좌에서 우로 가로 배치
         function renderTimetableAndSlots(teacherName) {
             updateSectionDateLabels();
             const data = teacherDataStore[teacherName];
@@ -607,14 +628,14 @@
             ['friday', 'saturday', 'sunday'].forEach(day => {
                 const rowContainer = document.getElementById(`row-${day}`);
                 rowContainer.innerHTML = "";
-                const daySlots = data.slots[day] || [];
+                const daySlots = getSortedSlots(data.slots[day] || []);
 
                 if (daySlots.length === 0) {
                     rowContainer.innerHTML = '<div class="text-xs text-zinc-400 py-4 text-center w-full">등록된 수업이 없습니다.</div>';
                     return;
                 }
 
-                let slotsHtml = "";
+                let slotsHtml = `<div class="horizontal-scroll-container overflow-x-auto pb-3"><div class="flex space-x-4 items-start min-max-content">`;
                 daySlots.forEach(slot => {
                     const slotStudents = data.students.filter(s => s.slotId === slot.id);
                     let studentsHtml = "";
@@ -655,6 +676,7 @@
                         </div>
                     `;
                 });
+                slotsHtml += `</div></div>`;
                 rowContainer.innerHTML = slotsHtml;
             });
 
@@ -747,7 +769,7 @@
             const dayNameKo = { friday: '금', saturday: '토', sunday: '일' };
             ['friday', 'saturday', 'sunday'].forEach(day => {
                 if (data.slots[day]) {
-                    data.slots[day].forEach(slot => {
+                    getSortedSlots(data.slots[day]).forEach(slot => {
                         allSlots.push({ id: slot.id, label: `[${dayNameKo[day]}] ${slot.title}` });
                     });
                 }
@@ -801,7 +823,7 @@
 
             ['friday', 'saturday', 'sunday'].forEach(day => {
                 if (data.slots[day]) {
-                    data.slots[day].forEach(slot => {
+                    getSortedSlots(data.slots[day]).forEach(slot => {
                         if (slot.id === student.slotId) {
                             currentSlotIndex = slotCounter;
                         }
@@ -1111,7 +1133,7 @@
             const currentTeacher = getCurrentActiveTeacher();
             if (currentTeacher === "통합출석부") return;
 
-            const timeLabel = prompt("추가할 반 이름 및 시간대를 입력하세요:");
+            const timeLabel = prompt("추가할 반 이름 및 시간대를 입력하세요 (예: 청람중1 (오후 2시 - 오후 5시)):");
             if (!timeLabel) return;
 
             if (!teacherDataStore[currentTeacher]) initDefaultTeacherData(currentTeacher);
