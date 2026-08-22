@@ -100,6 +100,10 @@
                     </div>
                     <div class="flex items-center space-x-3">
                         <div class="flex items-center space-x-2">
+                            <label class="text-xs font-semibold text-zinc-600">학생 검색:</label>
+                            <input type="text" id="attendance-search-input" oninput="handleAttendanceSearch(this.value)" placeholder="이름 검색..." class="border border-zinc-300 rounded-xl px-3 py-1.5 text-sm bg-zinc-50 focus:outline-none focus:ring-1 focus:ring-primary w-32">
+                        </div>
+                        <div class="flex items-center space-x-2">
                             <label class="text-xs font-semibold text-zinc-600">조회 주차:</label>
                             <select id="week-select" onchange="changeWeek(this.value)" class="border border-zinc-300 rounded-xl px-3 py-1.5 text-sm bg-zinc-50 focus:outline-none focus:ring-1 focus:ring-primary font-bold text-primary">
                                 </select>
@@ -165,6 +169,9 @@
                             </label>
                             <span class="text-xs text-zinc-400" id="selected-count">0명 선택됨</span>
                         </div>
+                        <div class="pb-1">
+                            <input type="text" id="management-search-input" oninput="handleManagementSearch(this.value)" placeholder="이름으로 검색..." class="w-full border border-zinc-300 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary">
+                        </div>
                         <div id="management-student-list" class="space-y-2 max-h-[500px] overflow-y-auto pr-1"></div>
                     </div>
 
@@ -203,6 +210,16 @@
         </main>
     </div>
 
+    <div id="move-modal" class="hidden fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onclick="if(event.target===this) closeMoveModal()">
+        <div class="bg-white rounded-2xl shadow-lg w-full max-w-md max-h-[80vh] flex flex-col">
+            <div class="flex justify-between items-center p-4 border-b border-zinc-100">
+                <h3 class="font-bold text-base text-zinc-800">시간표 이동 - <span id="move-modal-student-name" class="text-primary"></span></h3>
+                <button onclick="closeMoveModal()" class="text-zinc-400 hover:text-zinc-700 text-xl leading-none">&times;</button>
+            </div>
+            <div id="move-modal-slot-list" class="p-4 space-y-4 overflow-y-auto"></div>
+        </div>
+    </div>
+
     <script>
         var SUPABASE_URL = 'https://haaiwbjdlqwrfrvsurxi.supabase.co'; 
         var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhhYWl3YmpkbHF3cmZydnN1cnhpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY1MTQ1NjQsImV4cCI6MjEwMjA5MDU2NH0.hiMuLbrgkF2W_-PR5dfwmqI2TAOLi3yJv25_iCMovFE'; 
@@ -214,6 +231,10 @@
         var teacherDataStore = {};
         var attendanceRecords = {};
         var globalReservations = [];
+        var attendanceSearchQuery = "";
+        var managementSearchQuery = "";
+        var moveModalStudentName = null;
+        var moveModalTeacherName = null;
 
         const teacherMap = {
             "9565": "황성웅", "9414": "정다운", "9062": "김신형", "2368": "문지현",
@@ -435,6 +456,124 @@
             });
         }
 
+        // ===== 검색 기능 (출석부 / 원생 관리) =====
+        function handleAttendanceSearch(value) {
+            attendanceSearchQuery = value.trim();
+            applyAttendanceSearchFilter();
+        }
+
+        function applyAttendanceSearchFilter() {
+            const q = attendanceSearchQuery;
+            document.querySelectorAll('.student-block').forEach(el => {
+                const name = el.getAttribute('data-student-name') || '';
+                if (!q || name.includes(q)) {
+                    el.classList.remove('hidden');
+                } else {
+                    el.classList.add('hidden');
+                }
+            });
+        }
+
+        function handleManagementSearch(value) {
+            managementSearchQuery = value.trim();
+            applyManagementSearchFilter();
+        }
+
+        function applyManagementSearchFilter() {
+            const q = managementSearchQuery;
+            document.querySelectorAll('#management-student-list [data-student-name]').forEach(item => {
+                const name = item.getAttribute('data-student-name') || '';
+                item.style.display = (!q || name.includes(q)) ? '' : 'none';
+            });
+        }
+
+        // ===== 학생 블록 더블클릭 -> 시간표 이동 모달 =====
+        function openMoveModal(studentName, teacherName) {
+            const data = teacherDataStore[teacherName];
+            if (!data) return;
+
+            moveModalStudentName = studentName;
+            moveModalTeacherName = teacherName;
+
+            document.getElementById("move-modal-student-name").innerText = `${studentName} (${teacherName}T)`;
+
+            const student = data.students.find(s => s.name === studentName);
+            const currentSlotId = student ? student.slotId : null;
+
+            const dayNameKo = { friday: '금요일', saturday: '토요일', sunday: '일요일' };
+            const listContainer = document.getElementById("move-modal-slot-list");
+            listContainer.innerHTML = "";
+
+            let hasAnySlot = false;
+            ['friday', 'saturday', 'sunday'].forEach(day => {
+                const daySlots = getSortedSlots(data.slots[day] || []);
+                if (daySlots.length === 0) return;
+                hasAnySlot = true;
+
+                const dayBlock = document.createElement("div");
+                const dayTitle = document.createElement("div");
+                dayTitle.className = "text-xs font-bold text-zinc-500 mb-1.5";
+                dayTitle.innerText = dayNameKo[day];
+                dayBlock.appendChild(dayTitle);
+
+                const slotWrap = document.createElement("div");
+                slotWrap.className = "space-y-1.5";
+
+                daySlots.forEach(slot => {
+                    const isCurrent = slot.id === currentSlotId;
+                    const btn = document.createElement("button");
+                    btn.type = "button";
+                    btn.className = isCurrent
+                        ? "w-full text-left px-3 py-2 rounded-lg text-sm font-semibold bg-primary text-white cursor-default"
+                        : "w-full text-left px-3 py-2 rounded-lg text-sm font-semibold bg-zinc-50 border border-zinc-200 text-zinc-700 hover:border-primary hover:bg-primary/5 transition";
+                    btn.innerText = slot.title + (isCurrent ? " (현재 위치)" : "");
+                    if (isCurrent) {
+                        btn.disabled = true;
+                    } else {
+                        btn.onclick = function () { confirmMoveStudent(slot.id); };
+                    }
+                    slotWrap.appendChild(btn);
+                });
+
+                dayBlock.appendChild(slotWrap);
+                listContainer.appendChild(dayBlock);
+            });
+
+            if (!hasAnySlot) {
+                listContainer.innerHTML = '<div class="text-xs text-zinc-400 text-center py-6">이동할 수 있는 시간대 박스가 없습니다.</div>';
+            }
+
+            document.getElementById("move-modal").classList.remove("hidden");
+        }
+
+        function closeMoveModal() {
+            document.getElementById("move-modal").classList.add("hidden");
+            moveModalStudentName = null;
+            moveModalTeacherName = null;
+        }
+
+        function confirmMoveStudent(newSlotId) {
+            if (!moveModalStudentName || !moveModalTeacherName) return;
+            const data = teacherDataStore[moveModalTeacherName];
+            if (!data) return;
+
+            const student = data.students.find(s => s.name === moveModalStudentName);
+            if (!student) return;
+
+            student.slotId = newSlotId;
+            sortStudentsAlphabetically(moveModalTeacherName);
+            saveDataToSupabase('teacherDataStore', teacherDataStore);
+
+            const currentTeacher = getCurrentActiveTeacher();
+            if (currentTeacher === "통합출석부") {
+                renderIntegratedTimetable();
+            } else {
+                renderTimetableAndSlots(moveModalTeacherName);
+            }
+
+            closeMoveModal();
+        }
+
         function changeTeacher(targetValue) {
             if (targetValue === "통합출석부") {
                 document.getElementById("attendance-title").innerText = "전체 통합 출석부";
@@ -552,7 +691,7 @@
                             const absBtnClass = !isAtt ? "bg-[#fee2e2] text-[#b91c1c] font-bold" : "bg-zinc-100 text-zinc-500 font-semibold";
 
                             studentsHtml += `
-                                <div class="student-block flex items-center p-2 rounded-lg border border-zinc-200 bg-white shadow-sm hover:border-primary" data-student-name="${s.name}">
+                                <div class="student-block flex items-center p-2 rounded-lg border border-zinc-200 bg-white shadow-sm hover:border-primary" data-student-name="${s.name}" ondblclick="openMoveModal('${s.name}', '${tName}')" title="더블클릭하면 시간표 이동이 가능합니다">
                                     <div class="w-24 shrink-0 truncate mr-1.5">
                                         <span class="font-bold text-xs text-zinc-900">${s.name}</span>
                                         <span class="text-[10px] text-zinc-500">(${s.school})</span>
@@ -599,6 +738,8 @@
                     rowContainer.innerHTML = columnsHtml;
                 }
             });
+
+            applyAttendanceSearchFilter();
         }
 
         function renderTimetableAndSlots(teacherName) {
@@ -629,7 +770,7 @@
                         const absBtnClass = !isAtt ? "bg-[#fee2e2] text-[#b91c1c] font-bold" : "bg-zinc-100 text-zinc-500 font-semibold";
 
                         studentsHtml += `
-                            <div class="student-block flex items-center p-2 rounded-lg border border-zinc-200 bg-white shadow-sm hover:border-primary" data-student-name="${s.name}">
+                            <div class="student-block flex items-center p-2 rounded-lg border border-zinc-200 bg-white shadow-sm hover:border-primary" data-student-name="${s.name}" ondblclick="openMoveModal('${s.name}', '${teacherName}')" title="더블클릭하면 시간표 이동이 가능합니다">
                                 <div class="w-24 shrink-0 truncate mr-1.5">
                                     <span class="font-bold text-xs text-zinc-900">${s.name}</span>
                                     <span class="text-[10px] text-zinc-500">(${s.school})</span>
@@ -662,6 +803,7 @@
             });
 
             initDragAndDrop();
+            applyAttendanceSearchFilter();
         }
 
         function handleStatusClick(studentName, status, btnElement) {
@@ -697,6 +839,7 @@
             students.forEach((s, idx) => {
                 const item = document.createElement("div");
                 item.className = "flex items-center justify-between p-2.5 rounded-xl border border-zinc-200 bg-zinc-50/50 hover:bg-white transition";
+                item.setAttribute('data-student-name', s.name);
                 item.innerHTML = `
                     <div class="flex items-center space-x-3 overflow-hidden">
                         <input type="checkbox" data-index="${idx}" data-name="${s.name}" onchange="updateSelectedCount()" class="student-checkbox w-4 h-4 text-primary rounded border-zinc-300 focus:ring-primary">
@@ -713,6 +856,7 @@
                 listContainer.appendChild(item);
             });
             updateSelectedCount();
+            applyManagementSearchFilter();
         }
 
         function toggleSelectAll(masterCheckbox) {
