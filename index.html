@@ -666,20 +666,28 @@
                 const rowContainer = document.getElementById(`row-${day}`);
                 rowContainer.innerHTML = "";
 
-                let hasAnySlots = false;
-                let columnsHtml = `<div class="horizontal-scroll-container overflow-x-auto pb-3"><div class="flex space-x-4 items-start min-max-content">`;
-
+                // 해당 요일에 수업이 있는 강사만 컬럼으로 구성
+                const teacherColumns = [];
                 orderedTeacherNames.forEach(tName => {
                     if (!teacherDataStore[tName]) initDefaultTeacherData(tName);
                     const tData = teacherDataStore[tName];
                     const daySlots = getSortedSlots(tData.slots[day] || []);
+                    if (daySlots.length > 0) {
+                        teacherColumns.push({ tName, daySlots, tData });
+                    }
+                });
 
-                    if (daySlots.length === 0) return;
-                    hasAnySlots = true;
+                if (teacherColumns.length === 0) {
+                    rowContainer.innerHTML = '<div class="text-xs text-zinc-400 py-4 text-center w-full">등록된 수업이 없습니다.</div>';
+                    return;
+                }
 
-                    let teacherSlotsCardsHtml = "";
+                // CSS Grid로 배치: 같은 줄(grid-row)에 놓인 카드들은 그 줄에서 가장 큰 카드 높이에 자동으로 맞춰짐(stretch)
+                let cardsHtml = "";
+                teacherColumns.forEach((col, colIdx) => {
+                    const { tName, daySlots, tData } = col;
 
-                    daySlots.forEach(slot => {
+                    daySlots.forEach((slot, slotIdx) => {
                         const slotStudents = tData.students.filter(s => s.slotId === slot.id);
                         let studentsHtml = "";
 
@@ -713,8 +721,8 @@
                             studentsHtml = '<div class="text-[11px] text-zinc-400 text-center py-2">학생 없음</div>';
                         }
 
-                        teacherSlotsCardsHtml += `
-                            <div class="w-full bg-zinc-50/50 p-4 rounded-xl border border-zinc-200 self-start">
+                        cardsHtml += `
+                            <div class="bg-zinc-50/50 p-4 rounded-xl border border-zinc-200" style="grid-column: ${colIdx + 1}; grid-row: ${slotIdx + 1};">
                                 <div class="flex justify-between items-center mb-3">
                                     <span class="text-xs font-bold text-zinc-700 truncate"><span class="text-primary">[${tName}T]</span> ${slot.title}</span>
                                 </div>
@@ -722,21 +730,17 @@
                             </div>
                         `;
                     });
-
-                    columnsHtml += `
-                        <div class="flex-1 min-w-[300px] max-w-[calc(33.333%-0.6667rem)] self-start space-y-3">
-                            ${teacherSlotsCardsHtml}
-                        </div>
-                    `;
                 });
 
-                columnsHtml += `</div></div>`;
+                const gridStyle = `grid-template-columns: repeat(${teacherColumns.length}, minmax(300px, 400px)); grid-auto-rows: auto;`;
 
-                if (!hasAnySlots) {
-                    rowContainer.innerHTML = '<div class="text-xs text-zinc-400 py-4 text-center w-full">등록된 수업이 없습니다.</div>';
-                } else {
-                    rowContainer.innerHTML = columnsHtml;
-                }
+                rowContainer.innerHTML = `
+                    <div class="horizontal-scroll-container overflow-x-auto pb-3">
+                        <div class="grid gap-4 items-stretch" style="${gridStyle}">
+                            ${cardsHtml}
+                        </div>
+                    </div>
+                `;
             });
 
             applyAttendanceSearchFilter();
