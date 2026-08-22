@@ -213,10 +213,15 @@
     <div id="move-modal" class="hidden fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onclick="if(event.target===this) closeMoveModal()">
         <div class="bg-white rounded-2xl shadow-lg w-full max-w-md max-h-[80vh] flex flex-col">
             <div class="flex justify-between items-center p-4 border-b border-zinc-100">
-                <h3 class="font-bold text-base text-zinc-800">시간표 이동 - <span id="move-modal-student-name" class="text-primary"></span></h3>
+                <h3 class="font-bold text-base text-zinc-800">시간표 등록 관리 - <span id="move-modal-student-name" class="text-primary"></span></h3>
                 <button onclick="closeMoveModal()" class="text-zinc-400 hover:text-zinc-700 text-xl leading-none">&times;</button>
             </div>
+            <p class="px-4 pt-3 text-xs text-zinc-500">체크된 시간대에 학생이 등록됩니다. 여러 개를 선택하면 여러 시간표에 동시 등록됩니다.</p>
             <div id="move-modal-slot-list" class="p-4 space-y-4 overflow-y-auto"></div>
+            <div class="flex justify-end space-x-2 p-4 border-t border-zinc-100">
+                <button onclick="closeMoveModal()" class="px-4 py-2 rounded-lg text-sm font-semibold text-zinc-600 hover:bg-zinc-100 transition">취소</button>
+                <button onclick="saveMoveModalSelection()" class="px-4 py-2 rounded-lg text-sm font-semibold bg-primary text-white hover:bg-primary-hover transition">저장</button>
+            </div>
         </div>
     </div>
 
@@ -436,14 +441,20 @@
                         onEnd: function (evt) {
                             const itemEl = evt.item;
                             const targetZone = evt.to;
+                            const sourceZone = evt.from;
                             const studentName = itemEl.getAttribute('data-student-name');
                             const newSlotId = targetZone.getAttribute('data-slot-id');
+                            const oldSlotId = sourceZone.getAttribute('data-slot-id');
                             
                             const currentTeacher = getCurrentActiveTeacher();
                             if (currentTeacher && currentTeacher !== "통합출석부" && teacherDataStore[currentTeacher]) {
                                 const studentObj = teacherDataStore[currentTeacher].students.find(s => s.name === studentName);
                                 if (studentObj) {
-                                    studentObj.slotId = newSlotId;
+                                    let ids = getStudentSlotIds(studentObj);
+                                    ids = ids.filter(id => id !== oldSlotId);
+                                    if (!ids.includes(newSlotId)) ids.push(newSlotId);
+                                    studentObj.slotIds = ids;
+                                    delete studentObj.slotId;
                                     sortStudentsAlphabetically(currentTeacher);
                                     renderFullApp(currentTeacher);
                                     saveDataToSupabase('teacherDataStore', teacherDataStore);
@@ -454,6 +465,25 @@
                     zone.setAttribute('data-sortable', 'true');
                 }
             });
+        }
+
+        // ===== 다중 시간표 등록 지원 헬퍼 =====
+        function getStudentSlotIds(student) {
+            if (Array.isArray(student.slotIds)) return student.slotIds.slice();
+            if (student.slotId) return [student.slotId];
+            return [];
+        }
+
+        function parseSlotChoiceInput(input, allSlots) {
+            const parts = input.split(/[,，\s]+/).map(p => p.trim()).filter(p => p !== "");
+            const ids = [];
+            parts.forEach(p => {
+                const idx = parseInt(p, 10) - 1;
+                if (!isNaN(idx) && allSlots[idx] && !ids.includes(allSlots[idx].id)) {
+                    ids.push(allSlots[idx].id);
+                }
+            });
+            return ids;
         }
 
         // ===== 검색 기능 (출석부 / 원생 관리) =====
@@ -487,7 +517,7 @@
             });
         }
 
-        // ===== 학생 블록 더블클릭 -> 시간표 이동 모달 =====
+        // ===== 학생 블록 더블클릭 -> 시간표 등록(다중 선택) 관리 모달 =====
         function openMoveModal(studentName, teacherName) {
             const data = teacherDataStore[teacherName];
             if (!data) return;
@@ -498,7 +528,7 @@
             document.getElementById("move-modal-student-name").innerText = `${studentName} (${teacherName}T)`;
 
             const student = data.students.find(s => s.name === studentName);
-            const currentSlotId = student ? student.slotId : null;
+            const currentSlotIds = student ? getStudentSlotIds(student) : [];
 
             const dayNameKo = { friday: '금요일', saturday: '토요일', sunday: '일요일' };
             const listContainer = document.getElementById("move-modal-slot-list");
@@ -520,19 +550,23 @@
                 slotWrap.className = "space-y-1.5";
 
                 daySlots.forEach(slot => {
-                    const isCurrent = slot.id === currentSlotId;
-                    const btn = document.createElement("button");
-                    btn.type = "button";
-                    btn.className = isCurrent
-                        ? "w-full text-left px-3 py-2 rounded-lg text-sm font-semibold bg-primary text-white cursor-default"
-                        : "w-full text-left px-3 py-2 rounded-lg text-sm font-semibold bg-zinc-50 border border-zinc-200 text-zinc-700 hover:border-primary hover:bg-primary/5 transition";
-                    btn.innerText = slot.title + (isCurrent ? " (현재 위치)" : "");
-                    if (isCurrent) {
-                        btn.disabled = true;
-                    } else {
-                        btn.onclick = function () { confirmMoveStudent(slot.id); };
-                    }
-                    slotWrap.appendChild(btn);
+                    const isChecked = currentSlotIds.includes(slot.id);
+                    const label = document.createElement("label");
+                    label.className = "flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-semibold border border-zinc-200 bg-zinc-50 hover:border-primary cursor-pointer transition";
+
+                    const checkbox = document.createElement("input");
+                    checkbox.type = "checkbox";
+                    checkbox.value = slot.id;
+                    checkbox.checked = isChecked;
+                    checkbox.className = "move-modal-slot-checkbox w-4 h-4 text-primary rounded border-zinc-300 focus:ring-primary";
+
+                    const textSpan = document.createElement("span");
+                    textSpan.className = "text-zinc-700";
+                    textSpan.innerText = slot.title;
+
+                    label.appendChild(checkbox);
+                    label.appendChild(textSpan);
+                    slotWrap.appendChild(label);
                 });
 
                 dayBlock.appendChild(slotWrap);
@@ -540,7 +574,7 @@
             });
 
             if (!hasAnySlot) {
-                listContainer.innerHTML = '<div class="text-xs text-zinc-400 text-center py-6">이동할 수 있는 시간대 박스가 없습니다.</div>';
+                listContainer.innerHTML = '<div class="text-xs text-zinc-400 text-center py-6">등록할 수 있는 시간대 박스가 없습니다.</div>';
             }
 
             document.getElementById("move-modal").classList.remove("hidden");
@@ -552,7 +586,7 @@
             moveModalTeacherName = null;
         }
 
-        function confirmMoveStudent(newSlotId) {
+        function saveMoveModalSelection() {
             if (!moveModalStudentName || !moveModalTeacherName) return;
             const data = teacherDataStore[moveModalTeacherName];
             if (!data) return;
@@ -560,7 +594,15 @@
             const student = data.students.find(s => s.name === moveModalStudentName);
             if (!student) return;
 
-            student.slotId = newSlotId;
+            const checkedIds = Array.from(document.querySelectorAll('.move-modal-slot-checkbox:checked')).map(cb => cb.value);
+
+            if (checkedIds.length === 0) {
+                alert("최소 1개 이상의 시간대를 선택해야 합니다.");
+                return;
+            }
+
+            student.slotIds = checkedIds;
+            delete student.slotId;
             sortStudentsAlphabetically(moveModalTeacherName);
             saveDataToSupabase('teacherDataStore', teacherDataStore);
 
@@ -658,6 +700,15 @@
             const rec = getStudentRecord(studentName);
             rec.memo = memoText;
             saveDataToSupabase('attendanceRecords', attendanceRecords);
+
+            // 한 학생이 여러 시간표에 등록된 경우, 다른 블록의 비고도 함께 동기화
+            document.querySelectorAll('.student-block').forEach(block => {
+                if (block.getAttribute('data-student-name') !== studentName) return;
+                const input = block.querySelector('input[type="text"]');
+                if (input && document.activeElement !== input) {
+                    input.value = memoText;
+                }
+            });
         }
 
         function renderIntegratedTimetable() {
@@ -688,7 +739,7 @@
                     const { tName, daySlots, tData } = col;
 
                     daySlots.forEach((slot, slotIdx) => {
-                        const slotStudents = tData.students.filter(s => s.slotId === slot.id);
+                        const slotStudents = tData.students.filter(s => getStudentSlotIds(s).includes(slot.id));
                         let studentsHtml = "";
 
                         slotStudents.forEach(s => {
@@ -763,7 +814,7 @@
 
                 let slotsHtml = `<div class="horizontal-scroll-container overflow-x-auto pb-3"><div class="flex space-x-4 items-start min-max-content">`;
                 daySlots.forEach(slot => {
-                    const slotStudents = data.students.filter(s => s.slotId === slot.id);
+                    const slotStudents = data.students.filter(s => getStudentSlotIds(s).includes(slot.id));
                     let studentsHtml = "";
 
                     slotStudents.forEach(s => {
@@ -812,18 +863,22 @@
 
         function handleStatusClick(studentName, status, btnElement) {
             updateStudentStatus(studentName, status);
-            const parentContainer = btnElement.parentElement;
-            const buttons = parentContainer.querySelectorAll('.status-btn');
-            
-            buttons.forEach(btn => {
-                btn.className = "px-2 py-0.5 text-[11px] rounded font-semibold bg-zinc-100 text-zinc-500 status-btn";
-            });
 
-            if (status === '출석') {
-                btnElement.className = "px-2 py-0.5 text-[11px] rounded font-bold bg-[#dcfce7] text-[#15803d] status-btn";
-            } else {
-                btnElement.className = "px-2 py-0.5 text-[11px] rounded font-bold bg-[#fee2e2] text-[#b91c1c] status-btn";
-            }
+            // 한 학생이 여러 시간표에 등록된 경우, 모든 블록의 출석/결석 버튼을 함께 동기화
+            document.querySelectorAll('.student-block').forEach(block => {
+                if (block.getAttribute('data-student-name') !== studentName) return;
+                const buttons = block.querySelectorAll('.status-btn');
+                buttons.forEach(btn => {
+                    btn.className = "px-2 py-0.5 text-[11px] rounded font-semibold bg-zinc-100 text-zinc-500 status-btn";
+                });
+                buttons.forEach(btn => {
+                    if (btn.innerText.trim() === status) {
+                        btn.className = status === '출석'
+                            ? "px-2 py-0.5 text-[11px] rounded font-bold bg-[#dcfce7] text-[#15803d] status-btn"
+                            : "px-2 py-0.5 text-[11px] rounded font-bold bg-[#fee2e2] text-[#b91c1c] status-btn";
+                    }
+                });
+            });
         }
 
         function renderManagementStudents(teacherName) {
@@ -913,21 +968,21 @@
             if (!name) return;
             const school = prompt("학교 또는 소속을 입력하세요 (예: 청라중1):") || "미입력";
 
-            let slotMsg = "배치할 시간대 번호를 선택하세요:\n";
+            let slotMsg = "배치할 시간대 번호를 선택하세요. (2개 이상 등록 시 쉼표로 구분, 예: 1,3):\n";
             allSlots.forEach((slot, idx) => { slotMsg += `${idx + 1}. ${slot.label}\n`; });
             const slotChoice = prompt(slotMsg, "1");
             if (!slotChoice) return;
 
-            const choiceIdx = parseInt(slotChoice) - 1;
-            if (isNaN(choiceIdx) || !allSlots[choiceIdx]) {
+            const chosenIds = parseSlotChoiceInput(slotChoice, allSlots);
+            if (chosenIds.length === 0) {
                 alert("잘못된 선택입니다.");
                 return;
             }
 
-            data.students.push({ name, school, slotId: allSlots[choiceIdx].id });
+            data.students.push({ name, school, slotIds: chosenIds });
             renderFullApp(currentTeacher);
             saveDataToSupabase('teacherDataStore', teacherDataStore);
-            alert(`"${name}" 원생이 성공적으로 등록되었습니다.`);
+            alert(`"${name}" 원생이 성공적으로 등록되었습니다. (${chosenIds.length}개 시간표 등록)`);
         }
 
         function editManagementStudent(teacherName, index) {
@@ -947,14 +1002,15 @@
 
             let allSlots = [];
             const dayNameKo = { friday: '금', saturday: '토', sunday: '일' };
-            let currentSlotIndex = 0;
+            const currentSlotIds = getStudentSlotIds(student);
+            let currentIndexList = [];
             let slotCounter = 0;
 
             ['friday', 'saturday', 'sunday'].forEach(day => {
                 if (data.slots[day]) {
                     getSortedSlots(data.slots[day]).forEach(slot => {
-                        if (slot.id === student.slotId) {
-                            currentSlotIndex = slotCounter;
+                        if (currentSlotIds.includes(slot.id)) {
+                            currentIndexList.push(slotCounter + 1);
                         }
                         allSlots.push({ id: slot.id, label: `[${dayNameKo[day]}] ${slot.title}` });
                         slotCounter++;
@@ -971,17 +1027,17 @@
                 return;
             }
 
-            let slotMsg = "배치할 시간대 번호를 선택하세요:\n";
+            let slotMsg = "배치할 시간대 번호를 선택하세요. (2개 이상 등록 시 쉼표로 구분, 예: 1,3):\n";
             allSlots.forEach((slot, idx) => { 
-                let isCurrent = (idx === currentSlotIndex) ? " (현재)" : "";
+                let isCurrent = currentIndexList.includes(idx + 1) ? " (현재)" : "";
                 slotMsg += `${idx + 1}. ${slot.label}${isCurrent}\n`; 
             });
 
-            const slotChoice = prompt(slotMsg, String(currentSlotIndex + 1));
+            const slotChoice = prompt(slotMsg, currentIndexList.join(','));
             if (slotChoice === null) return;
 
-            const choiceIdx = parseInt(slotChoice) - 1;
-            if (isNaN(choiceIdx) || !allSlots[choiceIdx]) {
+            const chosenIds = parseSlotChoiceInput(slotChoice, allSlots);
+            if (chosenIds.length === 0) {
                 alert("잘못된 선택입니다. 이름과 학교만 우선 수정됩니다.");
                 student.name = newName.trim();
                 student.school = newSchool.trim();
@@ -992,7 +1048,8 @@
 
             student.name = newName.trim();
             student.school = newSchool.trim();
-            student.slotId = allSlots[choiceIdx].id;
+            student.slotIds = chosenIds;
+            delete student.slotId;
 
             renderFullApp(teacherName);
             saveDataToSupabase('teacherDataStore', teacherDataStore);
@@ -1102,7 +1159,7 @@
                     tData.students.push({
                         name: name,
                         school: school,
-                        slotId: targetSlotId
+                        slotIds: [targetSlotId]
                     });
                     addedCount++;
                 }
@@ -1313,9 +1370,14 @@
                     saveDataToSupabase('teacherDataStore', teacherDataStore);
                 }
             } else if (action === "2" || action === "박스 삭제") {
-                if (confirm(`정말 "${slot.title}" 박스를 삭제하시겠습니까?\n포함된 학생들도 함께 해제됩니다.`)) {
+                if (confirm(`정말 "${slot.title}" 박스를 삭제하시겠습니까?\n이 시간대에만 등록된 학생은 목록에서 함께 해제되고, 다른 시간표에도 등록된 학생은 그 시간표에 그대로 남습니다.`)) {
                     data.slots[dayKey] = data.slots[dayKey].filter(s => s.id !== slotId);
-                    data.students = data.students.filter(s => s.slotId !== slotId);
+                    data.students.forEach(s => {
+                        const ids = getStudentSlotIds(s).filter(id => id !== slotId);
+                        s.slotIds = ids;
+                        delete s.slotId;
+                    });
+                    data.students = data.students.filter(s => s.slotIds.length > 0);
                     renderFullApp(teacherName);
                     saveDataToSupabase('teacherDataStore', teacherDataStore);
                 }
