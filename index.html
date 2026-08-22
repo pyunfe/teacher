@@ -27,6 +27,8 @@
         .student-block { cursor: grab; transition: all 0.15s; }
         .student-block:active { cursor: grabbing; }
         .sortable-ghost { opacity: 0.4; background: #e5e7eb !important; }
+        .sortable-fallback { opacity: 0.9 !important; background: #ffffff !important; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); }
+        .dropzone { min-height: 50px; }
         .horizontal-scroll-container::-webkit-scrollbar { height: 8px; }
         .horizontal-scroll-container::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
         .horizontal-scroll-container::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
@@ -205,7 +207,7 @@
 
     <script>
         var SUPABASE_URL = 'https://haaiwbjdlqwrfrvsurxi.supabase.co'; 
-        var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhhYWl3YmpkbHF3cmZydnN1cnhpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY1MTQ1NjQsImV4cCI6MjEwMjA5MDU2NH0.hiMuLbrgkF2W_-PR5dfwmqI2TAOLi3yJv25_iCMovFE'; 
+        var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInRefiI6ImhhYWl3YmpkbHF3cmZydnN1cnhpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY1MTQ1NjQsImV4cCI6MjEwMjA5MDU2NH0.hiMuLbrgkF2W_-PR5dfwmqI2TAOLi3yJv25_iCMovFE'; 
         
         var supabaseClient = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
 
@@ -407,10 +409,12 @@
                         group: 'shared-timetable',
                         animation: 150,
                         ghostClass: 'sortable-ghost',
-                        scroll: true,
-                        scrollSensitivity: 80,
-                        scrollSpeed: 15,
-                        bubbleScroll: true,
+                        fallbackClass: 'sortable-fallback',
+                        forceFallback: true,        // HTML5 드래그 대신 모의 드래그 사용하여 브라우저 스크롤 이벤트 차단 해제
+                        scroll: true,               // 스크롤 허용
+                        scrollSensitivity: 100,      // 마우스가 스크롤 영역에 가까워지는 감도 설정 (px)
+                        scrollSpeed: 20,            // 스크롤 속도
+                        bubbleScroll: true,         // 부모 스크롤 요소까지 이벤트 전파
                         onEnd: function (evt) {
                             const itemEl = evt.item;
                             const targetZone = evt.to;
