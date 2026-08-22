@@ -852,102 +852,127 @@
         }
 
         function handleExcelUpload(event) {
-            const currentTeacher = getCurrentActiveTeacher();
-            if (currentTeacher === "통합출석부") {
-                alert("통합출석부 모드에서는 원생을 등록할 수 없습니다. 특정 강사를 선택한 후 업로드해주세요.");
-                event.target.value = "";
+    const currentTeacher = getCurrentActiveTeacher();
+    if (currentTeacher === "통합출석부") {
+        alert("통합출석부 모드에서는 원생을 등록할 수 없습니다. 특정 강사를 선택한 후 업로드해주세요.");
+        event.target.value = "";
+        return;
+    }
+
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, { type: 'array' });
+            
+            const firstSheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[firstSheetName];
+            
+            const jsonRows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+            
+            if (jsonRows.length === 0) {
+                alert("엑셀 파일에 데이터가 없습니다.");
                 return;
             }
 
-            const file = event.target.files[0];
-            if (!file) return;
+            let headerRowIdx = 0;
+            let nameColIdx = -1;
+            let schoolColIdx = -1;
 
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                try {
-                    const data = new Uint8Array(e.target.result);
-                    const workbook = XLSX.read(data, { type: 'array' });
-                    
-                    const firstSheetName = workbook.SheetNames[0];
-                    const worksheet = workbook.Sheets[firstSheetName];
-                    
-                    const jsonRows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-                    
-                    if (jsonRows.length === 0) {
-                        alert("엑셀 파일에 데이터가 없습니다.");
-                        return;
-                    }
-
-                    let headerRowIdx = 0;
-                    let nameColIdx = -1;
-                    let schoolColIdx = -1;
-
-                    for (let i = 0; i < Math.min(jsonRows.length, 5); i++) {
-                        let row = jsonRows[i];
-                        for (let j = 0; j < row.length; j++) {
-                            let cellVal = String(row[j] || "").trim();
-                            if (cellVal.includes("이름") || cellVal.includes("학생명")) nameColIdx = j;
-                            if (cellVal.includes("학교") || cellVal.includes("소속") || cellVal.includes("학년")) schoolColIdx = j;
-                        }
-                        if (nameColIdx !== -1) {
-                            headerRowIdx = i;
-                            break;
-                        }
-                    }
-
-                    if (nameColIdx === -1) {
-                        nameColIdx = 0; 
-                        schoolColIdx = 1;
-                        headerRowIdx = 0;
-                    } else {
-                        headerRowIdx += 1;
-                    }
-
-                    if (!teacherDataStore[currentTeacher]) initDefaultTeacherData(currentTeacher);
-                    const tData = teacherDataStore[currentTeacher];
-
-                    let defaultSlotId = '';
-                    if (tData.slots.saturday.length > 0) {
-                        defaultSlotId = tData.slots.saturday[0].id;
-                    } else {
-                        defaultSlotId = 'slot-saturday-' + Date.now();
-                        tData.slots.saturday.push({ id: defaultSlotId, title: '정규반 (일괄등록)' });
-                    }
-
-                    let addedCount = 0;
-                    for (let i = headerRowIdx; i < jsonRows.length; i++) {
-                        let row = jsonRows[i];
-                        if (!row || row.length === 0) continue;
-
-                        let name = String(row[nameColIdx] || "").trim();
-                        if (!name || name === "이름" || name === "학생명") continue;
-
-                        let school = schoolColIdx !== -1 && row[schoolColIdx] ? String(row[schoolColIdx]).trim() : "통통통등록";
-
-                        let exists = tData.students.some(s => s.name === name);
-                        if (!exists) {
-                            tData.students.push({
-                                name: name,
-                                school: school,
-                                slotId: defaultSlotId
-                            });
-                            addedCount++;
-                        }
-                    }
-
-                    renderFullApp(currentTeacher);
-                    saveDataToSupabase('teacherDataStore', teacherDataStore);
-                    alert(`[일괄 등록 완료]\n총 ${addedCount}명의 원생이 ${currentTeacher}T 밑으로 성공적으로 등록되었습니다!`);
-
-                } catch (err) {
-                    console.error(err);
-                    alert("엑셀 파일을 읽는 중 오류가 발생했습니다.");
-                } finally {
-                    event.target.value = "";
+            // 헤더 위치 및 이름/학교학년 컬럼 탐색
+            for (let i = 0; i < Math.min(jsonRows.length, 5); i++) {
+                let row = jsonRows[i];
+                for (let j = 0; j < row.length; j++) {
+                    let cellVal = String(row[j] || "").trim();
+                    if (cellVal.includes("이름") || cellVal.includes("학생명")) nameColIdx = j;
+                    if (cellVal.includes("학교") || cellVal.includes("소속") || cellVal.includes("학년")) schoolColIdx = j;
                 }
-            };
-            reader.readAsArrayBuffer(file);
+                if (nameColIdx !== -1) {
+                    headerRowIdx = i;
+                    break;
+                }
+            }
+
+            if (nameColIdx === -1) {
+                nameColIdx = 0; 
+                schoolColIdx = 1;
+                headerRowIdx = 0;
+            } else {
+                headerRowIdx += 1;
+            }
+
+            if (!teacherDataStore[currentTeacher]) initDefaultTeacherData(currentTeacher);
+            const tData = teacherDataStore[currentTeacher];
+
+            // 강사의 전체 시간대(반) 목록 수집
+            let allTeacherSlots = [];
+            ['friday', 'saturday', 'sunday'].forEach(day => {
+                if (tData.slots[day]) {
+                    allTeacherSlots = allTeacherSlots.concat(tData.slots[day]);
+                }
+            });
+
+            // 매칭 가능한 박스가 하나도 없으면 기본 박스 생성
+            if (allTeacherSlots.length === 0) {
+                const defaultSlotId = 'slot-saturday-' + Date.now();
+                const defaultSlot = { id: defaultSlotId, title: '정규반 (일괄등록)' };
+                tData.slots.saturday.push(defaultSlot);
+                allTeacherSlots.push(defaultSlot);
+            }
+
+            let addedCount = 0;
+            let matchedCount = 0;
+
+            for (let i = headerRowIdx; i < jsonRows.length; i++) {
+                let row = jsonRows[i];
+                if (!row || row.length === 0) continue;
+
+                let name = String(row[nameColIdx] || "").trim();
+                if (!name || name === "이름" || name === "학생명") continue;
+
+                let school = schoolColIdx !== -1 && row[schoolColIdx] ? String(row[schoolColIdx]).trim() : "통통통등록";
+
+                let exists = tData.students.some(s => s.name === name);
+                if (!exists) {
+                    // 학교/학년 이름이 출석부 박스 제목에 포함되어 있는지 자동 검색 매칭
+                    let matchedSlot = allTeacherSlots.find(slot => {
+                        return school !== "통통통등록" && slot.title.includes(school);
+                    });
+
+                    let targetSlotId = "";
+                    if (matchedSlot) {
+                        targetSlotId = matchedSlot.id;
+                        matchedCount++;
+                    } else {
+                        // 일치하는 반이 없을 경우 첫 번째 시간대 박스로 기본 배치
+                        targetSlotId = allTeacherSlots[0].id;
+                    }
+
+                    tData.students.push({
+                        name: name,
+                        school: school,
+                        slotId: targetSlotId
+                    });
+                    addedCount++;
+                }
+            }
+
+            renderFullApp(currentTeacher);
+            saveDataToSupabase('teacherDataStore', teacherDataStore);
+            alert(`[일괄 등록 완료]\n총 ${addedCount}명의 원생 등록 완료!\n(학교/학년 자동 매칭 배치: ${matchedCount}명)`);
+
+        } catch (err) {
+            console.error(err);
+            alert("엑셀 파일을 읽는 중 오류가 발생했습니다.");
+        } finally {
+            event.target.value = "";
         }
+    };
+    reader.readAsArrayBuffer(file);
+}
 
         function deleteManagementStudent(teacherName, index) {
             if (confirm("정말 이 원생을 목록에서 삭제하시겠습니까?")) {
