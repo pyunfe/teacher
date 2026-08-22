@@ -144,7 +144,7 @@
             <section id="tab-management" class="hidden space-y-6">
                 <div class="flex justify-between items-center">
                     <div>
-                        <h2 class="text-xl font-bold text-zinc-800" id="management-title">원생 관리 및 카카오톡 전송 예약</h2>
+                        <h2 class="text-xl font-bold text-[#1c1b1b]" id="management-title">원생 관리 및 카카오톡 전송 예약</h2>
                         <p class="text-sm text-zinc-500">원생을 선택하고 전송할 내용을 작성한 뒤 예약 설정을 진행하세요.</p>
                     </div>
                     <div class="space-x-2 flex items-center">
@@ -407,6 +407,10 @@
                         group: 'shared-timetable',
                         animation: 150,
                         ghostClass: 'sortable-ghost',
+                        scroll: true,
+                        scrollSensitivity: 80,
+                        scrollSpeed: 15,
+                        bubbleScroll: true,
                         onEnd: function (evt) {
                             const itemEl = evt.item;
                             const targetZone = evt.to;
@@ -516,7 +520,6 @@
             saveDataToSupabase('attendanceRecords', attendanceRecords);
         }
 
-        // ★ [수정 완료] 선생님 타이틀 아래 수업 카드가 세로(Column)로 정렬되는 통합 출석부
         function renderIntegratedTimetable() {
             updateSectionDateLabels();
             ['friday', 'saturday', 'sunday'].forEach(day => {
@@ -531,7 +534,7 @@
                     const tData = teacherDataStore[tName];
                     const daySlots = getSortedSlots(tData.slots[day] || []);
 
-                    if (daySlots.length === 0) return; // 수업이 없는 선생님은 스킵
+                    if (daySlots.length === 0) return;
                     hasAnySlots = true;
 
                     let teacherSlotsCardsHtml = "";
@@ -580,7 +583,6 @@
                         `;
                     });
 
-                    // 강사 1명의 세로 칼럼 영역 (요일 박스에 3칸이 맞게 최대 너비 고정, 4번째부터는 가로 스크롤, 별도 헤더 박스 없이 수업 카드만 시간순 세로 나열)
                     columnsHtml += `
                         <div class="flex-1 min-w-[300px] max-w-[calc(33.333%-0.6667rem)] self-start space-y-3">
                             ${teacherSlotsCardsHtml}
