@@ -218,6 +218,17 @@
                 <button onclick="closeMoveModal()" class="text-zinc-400 hover:text-zinc-700 text-xl leading-none">&times;</button>
             </div>
             <p class="px-4 pt-3 text-xs text-zinc-500">체크된 시간대에 학생이 등록됩니다. 여러 개를 선택하면 여러 시간표에 동시 등록됩니다.</p>
+            <div class="px-4 pt-3 space-y-1.5 bg-zinc-50 mx-4 rounded-xl p-3 border border-zinc-200">
+                <label class="flex items-start space-x-2 cursor-pointer">
+                    <input type="radio" name="move-scope" value="week" id="move-scope-week" checked class="mt-0.5 w-4 h-4 text-primary focus:ring-primary">
+                    <span class="text-xs text-zinc-700"><b>이번 주차(<span id="move-modal-week-label" class="text-primary font-semibold"></span>)만 임시 이동</b><br><span class="text-[11px] text-zinc-500">다음 주차부터는 자동으로 기본 시간표대로 돌아갑니다.</span></span>
+                </label>
+                <label class="flex items-start space-x-2 cursor-pointer">
+                    <input type="radio" name="move-scope" value="default" id="move-scope-default" class="mt-0.5 w-4 h-4 text-primary focus:ring-primary">
+                    <span class="text-xs text-zinc-700"><b>기본 시간표 자체를 변경</b><br><span class="text-[11px] text-zinc-500">앞으로 매 주차 이 시간표로 계속 생성됩니다.</span></span>
+                </label>
+                <button id="move-modal-clear-override-btn" onclick="clearMoveModalOverride()" class="hidden text-[11px] text-rose-600 hover:underline font-semibold pt-1">이번 주 임시 설정 초기화 (기본 시간표로 복원)</button>
+            </div>
             <div id="move-modal-slot-list" class="p-4 space-y-4 overflow-y-auto"></div>
             <div class="flex justify-end space-x-2 p-4 border-t border-zinc-100">
                 <button onclick="closeMoveModal()" class="px-4 py-2 rounded-lg text-sm font-semibold text-zinc-600 hover:bg-zinc-100 transition">취소</button>
@@ -237,6 +248,9 @@
         var teacherDataStore = {};
         var attendanceRecords = {};
         var globalReservations = [];
+        // 주차별 임시 시간표 이동 기록. 구조: { [주차key]: { [강사명]: { [학생명]: { slotIds: [...] } } } }
+        // 여기에 없는 학생은 항상 teacherDataStore의 기본(slotIds) 설정을 따른다 -> 다음 주차부터는 자동으로 기본값 복원.
+        var weeklyOverrides = {};
         var attendanceSearchQuery = "";
         var managementSearchQuery = "";
         var moveModalStudentName = null;
@@ -269,6 +283,7 @@
                         if (row.id === 'teacherDataStore') teacherDataStore = row.data;
                         if (row.id === 'attendanceRecords') attendanceRecords = row.data;
                         if (row.id === 'globalReservations') globalReservations = row.data;
+                        if (row.id === 'weeklyOverrides') weeklyOverrides = row.data;
                     });
                 }
             } catch (err) {
@@ -431,6 +446,39 @@
             return [];
         }
 
+        // ===== 강사별 기본 시간표 vs 주차별 임시 이동 =====
+        function getWeeklyOverride(teacherName, studentName, weekKey) {
+            const wk = weeklyOverrides[weekKey];
+            if (!wk || !wk[teacherName]) return null;
+            return wk[teacherName][studentName] || null;
+        }
+
+        function hasWeeklyOverride(teacherName, studentName, weekKey) {
+            return !!getWeeklyOverride(teacherName, studentName, weekKey);
+        }
+
+        function setWeeklyOverride(teacherName, studentName, weekKey, slotIds) {
+            if (!weeklyOverrides[weekKey]) weeklyOverrides[weekKey] = {};
+            if (!weeklyOverrides[weekKey][teacherName]) weeklyOverrides[weekKey][teacherName] = {};
+            weeklyOverrides[weekKey][teacherName][studentName] = { slotIds: slotIds.slice() };
+            saveDataToSupabase('weeklyOverrides', weeklyOverrides);
+        }
+
+        function clearWeeklyOverride(teacherName, studentName, weekKey) {
+            const wk = weeklyOverrides[weekKey];
+            if (wk && wk[teacherName] && wk[teacherName][studentName]) {
+                delete wk[teacherName][studentName];
+                saveDataToSupabase('weeklyOverrides', weeklyOverrides);
+            }
+        }
+
+        // 해당 주차에 실제로 표시될 시간대 ID 목록 (임시 이동이 있으면 그것을, 없으면 강사별 기본 시간표를 반환)
+        function getEffectiveSlotIds(teacherName, student, weekKey) {
+            const override = getWeeklyOverride(teacherName, student.name, weekKey);
+            if (override) return override.slotIds.slice();
+            return getStudentSlotIds(student);
+        }
+
         function parseSlotChoiceInput(input, allSlots) {
             const parts = input.split(/[,，\s]+/).map(p => p.trim()).filter(p => p !== "");
             const ids = [];
@@ -483,9 +531,15 @@
             moveModalTeacherName = teacherName;
 
             document.getElementById("move-modal-student-name").innerText = `${studentName} (${teacherName}T)`;
+            document.getElementById("move-modal-week-label").innerText = currentSelectedWeek;
 
             const student = data.students.find(s => s.name === studentName);
-            const currentSlotIds = student ? getStudentSlotIds(student) : [];
+            const isTemp = student ? hasWeeklyOverride(teacherName, studentName, currentSelectedWeek) : false;
+            const currentSlotIds = student ? getEffectiveSlotIds(teacherName, student, currentSelectedWeek) : [];
+
+            document.getElementById("move-scope-week").checked = true;
+            document.getElementById("move-scope-default").checked = false;
+            document.getElementById("move-modal-clear-override-btn").classList.toggle("hidden", !isTemp);
 
             const dayNameKo = { friday: '금요일', saturday: '토요일', sunday: '일요일' };
             const listContainer = document.getElementById("move-modal-slot-list");
@@ -558,10 +612,19 @@
                 return;
             }
 
-            student.slotIds = checkedIds;
-            delete student.slotId;
-            sortStudentsAlphabetically(moveModalTeacherName);
-            saveDataToSupabase('teacherDataStore', teacherDataStore);
+            const scope = document.querySelector('input[name="move-scope"]:checked').value;
+
+            if (scope === 'week') {
+                // 이번 주차에만 임시로 반영. 강사의 기본 시간표(student.slotIds)는 그대로 유지되어 다음 주차부터 자동 복원됨.
+                setWeeklyOverride(moveModalTeacherName, moveModalStudentName, currentSelectedWeek, checkedIds);
+            } else {
+                // 기본 시간표 자체를 변경. 이번 주차에 걸려있던 임시 이동 기록은 정리한다.
+                student.slotIds = checkedIds;
+                delete student.slotId;
+                clearWeeklyOverride(moveModalTeacherName, moveModalStudentName, currentSelectedWeek);
+                sortStudentsAlphabetically(moveModalTeacherName);
+                saveDataToSupabase('teacherDataStore', teacherDataStore);
+            }
 
             const currentTeacher = getCurrentActiveTeacher();
             if (currentTeacher === "통합출석부") {
@@ -570,6 +633,21 @@
                 renderTimetableAndSlots(moveModalTeacherName);
             }
 
+            closeMoveModal();
+        }
+
+        function clearMoveModalOverride() {
+            if (!moveModalStudentName || !moveModalTeacherName) return;
+            if (!confirm("이번 주차의 임시 시간표 설정을 지우고 기본 시간표로 되돌리시겠습니까?")) return;
+
+            clearWeeklyOverride(moveModalTeacherName, moveModalStudentName, currentSelectedWeek);
+
+            const currentTeacher = getCurrentActiveTeacher();
+            if (currentTeacher === "통합출석부") {
+                renderIntegratedTimetable();
+            } else {
+                renderTimetableAndSlots(moveModalTeacherName);
+            }
             closeMoveModal();
         }
 
@@ -696,21 +774,24 @@
                     const { tName, daySlots, tData } = col;
 
                     daySlots.forEach((slot, slotIdx) => {
-                        const slotStudents = tData.students.filter(s => getStudentSlotIds(s).includes(slot.id));
+                        const slotStudents = tData.students.filter(s => getEffectiveSlotIds(tName, s, currentSelectedWeek).includes(slot.id));
                         let studentsHtml = "";
 
                         slotStudents.forEach(s => {
                             const rec = getStudentRecord(s.name, slot.id);
                             const isAtt = rec.status === '출석';
+                            const isTemp = hasWeeklyOverride(tName, s.name, currentSelectedWeek);
 
                             const attBtnClass = isAtt ? "bg-[#dcfce7] text-[#15803d] font-bold" : "bg-zinc-100 text-zinc-500 font-semibold";
                             const absBtnClass = !isAtt ? "bg-[#fee2e2] text-[#b91c1c] font-bold" : "bg-zinc-100 text-zinc-500 font-semibold";
+                            const tempBadge = isTemp ? '<span class="text-[9px] bg-amber-100 text-amber-700 px-1 rounded ml-1 align-middle">임시</span>' : '';
 
                             studentsHtml += `
                                 <div class="student-block flex items-center p-2 rounded-lg border border-zinc-200 bg-white shadow-sm hover:border-primary" data-student-name="${s.name}" ondblclick="openMoveModal('${s.name}', '${tName}')" title="더블클릭하면 시간표 이동이 가능합니다">
                                     <div class="w-24 shrink-0 truncate mr-1.5">
                                         <span class="font-bold text-xs text-zinc-900">${s.name}</span>
                                         <span class="text-[10px] text-zinc-500">(${s.school})</span>
+                                        ${tempBadge}
                                     </div>
                                     <div class="flex items-center space-x-1 shrink-0 mr-1.5">
                                         <button onclick="handleStatusClick('${s.name}', '${slot.id}', '출석', this)" class="px-2 py-0.5 text-[11px] rounded ${attBtnClass} status-btn">출석</button>
@@ -771,21 +852,24 @@
 
                 let slotsHtml = `<div class="horizontal-scroll-container overflow-x-auto pb-3"><div class="flex space-x-4 items-start min-max-content">`;
                 daySlots.forEach(slot => {
-                    const slotStudents = data.students.filter(s => getStudentSlotIds(s).includes(slot.id));
+                    const slotStudents = data.students.filter(s => getEffectiveSlotIds(teacherName, s, currentSelectedWeek).includes(slot.id));
                     let studentsHtml = "";
 
                     slotStudents.forEach(s => {
                         const rec = getStudentRecord(s.name, slot.id);
                         const isAtt = rec.status === '출석';
+                        const isTemp = hasWeeklyOverride(teacherName, s.name, currentSelectedWeek);
                         
                         const attBtnClass = isAtt ? "bg-[#dcfce7] text-[#15803d] font-bold" : "bg-zinc-100 text-zinc-500 font-semibold";
                         const absBtnClass = !isAtt ? "bg-[#fee2e2] text-[#b91c1c] font-bold" : "bg-zinc-100 text-zinc-500 font-semibold";
+                        const tempBadge = isTemp ? '<span class="text-[9px] bg-amber-100 text-amber-700 px-1 rounded ml-1 align-middle">임시</span>' : '';
 
                         studentsHtml += `
                             <div class="student-block flex items-center p-2 rounded-lg border border-zinc-200 bg-white shadow-sm hover:border-primary" data-student-name="${s.name}" ondblclick="openMoveModal('${s.name}', '${teacherName}')" title="더블클릭하면 시간표 이동이 가능합니다">
                                 <div class="w-24 shrink-0 truncate mr-1.5">
                                     <span class="font-bold text-xs text-zinc-900">${s.name}</span>
                                     <span class="text-[10px] text-zinc-500">(${s.school})</span>
+                                    ${tempBadge}
                                 </div>
                                 <div class="flex items-center space-x-1 shrink-0 mr-1.5">
                                     <button onclick="handleStatusClick('${s.name}', '${slot.id}', '출석', this)" class="px-2 py-0.5 text-[11px] rounded ${attBtnClass} status-btn">출석</button>
@@ -852,18 +936,29 @@
                 item.className = "flex items-center justify-between p-2.5 rounded-xl border border-zinc-200 bg-zinc-50/50 hover:bg-white transition";
                 item.setAttribute('data-student-name', s.name);
                 const phoneDisplay = s.phone
-                    ? `<span class="text-[11px] text-zinc-500 ml-1">${s.phone}</span>`
-                    : `<span class="text-[11px] text-zinc-300 ml-1">번호없음</span>`;
+                    ? `<span class="text-[11px] text-zinc-500 ml-1">학생:${s.phone}</span>`
+                    : `<span class="text-[11px] text-zinc-300 ml-1">학생번호없음</span>`;
+                const parentPhoneDisplay = s.parentPhone
+                    ? `<span class="text-[11px] text-zinc-500 ml-1">학부모:${s.parentPhone}</span>`
+                    : `<span class="text-[11px] text-zinc-300 ml-1">학부모번호없음</span>`;
                 item.innerHTML = `
                     <div class="flex items-center space-x-3 overflow-hidden">
-                        <input type="checkbox" data-index="${idx}" data-name="${s.name}" onchange="updateSelectedCount()" class="student-checkbox w-4 h-4 text-primary rounded border-zinc-300 focus:ring-primary">
                         <div class="truncate">
                             <span class="font-bold text-xs text-zinc-900">${s.name}</span>
                             <span class="text-[11px] text-zinc-500">(${s.school})</span>
-                            ${phoneDisplay}
+                            <br>
+                            ${phoneDisplay}${parentPhoneDisplay}
                         </div>
                     </div>
-                    <div class="flex items-center space-x-1 shrink-0">
+                    <div class="flex items-center space-x-2 shrink-0">
+                        <label class="flex items-center space-x-1 text-[10px] font-semibold text-zinc-600 ${!s.phone ? 'opacity-30 pointer-events-none' : ''}">
+                            <input type="checkbox" data-name="${s.name}" data-type="student" data-phone="${s.phone || ''}" onchange="updateSelectedCount()" ${!s.phone ? 'disabled' : ''} class="recipient-checkbox w-3.5 h-3.5 text-primary rounded border-zinc-300 focus:ring-primary">
+                            <span>학생</span>
+                        </label>
+                        <label class="flex items-center space-x-1 text-[10px] font-semibold text-zinc-600 ${!s.parentPhone ? 'opacity-30 pointer-events-none' : ''}">
+                            <input type="checkbox" data-name="${s.name}" data-type="parent" data-phone="${s.parentPhone || ''}" onchange="updateSelectedCount()" ${!s.parentPhone ? 'disabled' : ''} class="recipient-checkbox w-3.5 h-3.5 text-primary rounded border-zinc-300 focus:ring-primary">
+                            <span>학부모</span>
+                        </label>
                         <button onclick="editManagementStudent('${teacherName}', ${idx})" class="text-[11px] bg-zinc-200 hover:bg-zinc-300 text-zinc-700 px-2.5 py-1 rounded font-semibold transition">수정</button>
                         <button onclick="deleteManagementStudent('${teacherName}', ${idx})" class="text-[11px] bg-rose-50 hover:bg-rose-100 text-rose-600 px-2 py-1 rounded font-semibold transition">삭제</button>
                     </div>
@@ -875,14 +970,16 @@
         }
 
         function toggleSelectAll(masterCheckbox) {
-            const checkboxes = document.querySelectorAll('.student-checkbox');
+            const checkboxes = document.querySelectorAll('.recipient-checkbox:not(:disabled)');
             checkboxes.forEach(cb => cb.checked = masterCheckbox.checked);
             updateSelectedCount();
         }
 
         function updateSelectedCount() {
-            const checkboxes = document.querySelectorAll('.student-checkbox:checked');
-            document.getElementById("selected-count").innerText = `${checkboxes.length}명 선택됨`;
+            const checkboxes = document.querySelectorAll('.recipient-checkbox:checked');
+            const studentCnt = Array.from(checkboxes).filter(cb => cb.getAttribute('data-type') === 'student').length;
+            const parentCnt = Array.from(checkboxes).filter(cb => cb.getAttribute('data-type') === 'parent').length;
+            document.getElementById("selected-count").innerText = `${checkboxes.length}건 선택됨 (학생 ${studentCnt}·학부모 ${parentCnt})`;
         }
 
         function getCurrentActiveTeacher() {
@@ -923,7 +1020,8 @@
             const name = prompt("추가할 원생 이름을 입력하세요:");
             if (!name) return;
             const school = prompt("학교 또는 소속을 입력하세요 (예: 청라중1):") || "미입력";
-            const phone = prompt("전화번호를 입력하세요 (선택 사항, 예: 010-1234-5678):") || "";
+            const phone = prompt("학생 전화번호를 입력하세요 (선택 사항, 예: 010-1234-5678):") || "";
+            const parentPhone = prompt("학부모 전화번호를 입력하세요 (선택 사항, 예: 010-1234-5678):") || "";
 
             let slotMsg = "배치할 시간대 번호를 선택하세요. (2개 이상 등록 시 쉼표로 구분, 예: 1,3):\n";
             allSlots.forEach((slot, idx) => { slotMsg += `${idx + 1}. ${slot.label}\n`; });
@@ -936,7 +1034,7 @@
                 return;
             }
 
-            data.students.push({ name, school, phone: phone.trim(), slotIds: chosenIds });
+            data.students.push({ name, school, phone: phone.trim(), parentPhone: parentPhone.trim(), slotIds: chosenIds });
             renderFullApp(currentTeacher);
             saveDataToSupabase('teacherDataStore', teacherDataStore);
             alert(`"${name}" 원생이 성공적으로 등록되었습니다. (${chosenIds.length}개 시간표 등록)`);
@@ -957,8 +1055,11 @@
             const newSchool = prompt("학교/소속을 수정하세요:", student.school);
             if (newSchool === null) return;
 
-            const newPhone = prompt("전화번호를 수정하세요 (예: 010-1234-5678):", student.phone || "");
+            const newPhone = prompt("학생 전화번호를 수정하세요 (예: 010-1234-5678):", student.phone || "");
             if (newPhone === null) return;
+
+            const newParentPhone = prompt("학부모 전화번호를 수정하세요 (예: 010-1234-5678):", student.parentPhone || "");
+            if (newParentPhone === null) return;
 
             let allSlots = [];
             const dayNameKo = { friday: '금', saturday: '토', sunday: '일' };
@@ -983,6 +1084,7 @@
                 student.name = newName.trim();
                 student.school = newSchool.trim();
                 student.phone = newPhone.trim();
+                student.parentPhone = newParentPhone.trim();
                 renderFullApp(teacherName);
                 saveDataToSupabase('teacherDataStore', teacherDataStore);
                 return;
@@ -1003,6 +1105,7 @@
                 student.name = newName.trim();
                 student.school = newSchool.trim();
                 student.phone = newPhone.trim();
+                student.parentPhone = newParentPhone.trim();
                 renderFullApp(teacherName);
                 saveDataToSupabase('teacherDataStore', teacherDataStore);
                 return;
@@ -1011,6 +1114,7 @@
             student.name = newName.trim();
             student.school = newSchool.trim();
             student.phone = newPhone.trim();
+                student.parentPhone = newParentPhone.trim();
             student.slotIds = chosenIds;
             delete student.slotId;
 
@@ -1166,24 +1270,30 @@
                     let nameColIdx = -1;
                     let schoolColIdx = -1;
                     let phoneColIdx = -1;
+                    let parentPhoneColIdx = -1;
 
-                    // 헤더 위치 및 이름/학교/전화번호 컬럼 탐색
+                    // 헤더 위치 및 이름/학교/전화번호/학부모번호 컬럼 탐색
                     for (let i = 0; i < Math.min(jsonRows.length, 5); i++) {
                         let row = jsonRows[i];
                         for (let j = 0; j < row.length; j++) {
                             let cellVal = String(row[j] || "").trim();
                             if (cellVal.includes("이름") || cellVal.includes("학생명")) nameColIdx = j;
                             if (cellVal.includes("학교") || cellVal.includes("소속") || cellVal.includes("학년")) schoolColIdx = j;
-                            if (cellVal.includes("번호") || cellVal.includes("연락처") || cellVal.includes("전화") || cellVal.toLowerCase().includes("phone")) phoneColIdx = j;
+                            // '학부모/보호자/부모' 가 포함된 헤더는 학부모 번호로, 나머지 번호/연락처/전화 헤더는 학생 번호로 인식
+                            if (cellVal.includes("학부모") || cellVal.includes("보호자") || cellVal.includes("부모")) {
+                                parentPhoneColIdx = j;
+                            } else if (cellVal.includes("번호") || cellVal.includes("연락처") || cellVal.includes("전화") || cellVal.toLowerCase().includes("phone")) {
+                                phoneColIdx = j;
+                            }
                         }
-                        if (nameColIdx !== -1 && phoneColIdx !== -1) {
+                        if (nameColIdx !== -1 && (phoneColIdx !== -1 || parentPhoneColIdx !== -1)) {
                             headerRowIdx = i;
                             break;
                         }
                     }
 
-                    if (nameColIdx === -1 || phoneColIdx === -1) {
-                        alert("엑셀에서 '이름'과 '전화번호(연락처)' 컬럼을 찾을 수 없습니다. 헤더 행을 확인해주세요.");
+                    if (nameColIdx === -1 || (phoneColIdx === -1 && parentPhoneColIdx === -1)) {
+                        alert("엑셀에서 '이름'과 '전화번호(연락처)' 또는 '학부모 번호' 컬럼을 찾을 수 없습니다. 헤더 행을 확인해주세요.");
                         return;
                     }
                     headerRowIdx += 1;
@@ -1199,8 +1309,9 @@
                         if (!name || name === "이름" || name === "학생명") continue;
 
                         let school = schoolColIdx !== -1 && row[schoolColIdx] ? String(row[schoolColIdx]).trim() : "";
-                        let phone = String(row[phoneColIdx] || "").trim();
-                        if (!phone) continue;
+                        let phone = phoneColIdx !== -1 && row[phoneColIdx] ? String(row[phoneColIdx]).trim() : "";
+                        let parentPhone = parentPhoneColIdx !== -1 && row[parentPhoneColIdx] ? String(row[parentPhoneColIdx]).trim() : "";
+                        if (!phone && !parentPhone) continue;
 
                         // 모든 강사 데이터에서 이름(+학교 일치 시 우선)으로 매칭해 번호만 채움
                         let found = false;
@@ -1215,7 +1326,10 @@
                             }
 
                             if (candidates.length > 0) {
-                                candidates.forEach(s => { s.phone = phone; });
+                                candidates.forEach(s => {
+                                    if (phone) s.phone = phone;
+                                    if (parentPhone) s.parentPhone = parentPhone;
+                                });
                                 found = true;
                             }
                         }
@@ -1258,13 +1372,13 @@
         }
 
         function handleKakaoReservation() {
-            const checkboxes = document.querySelectorAll('.student-checkbox:checked');
+            const checkboxes = document.querySelectorAll('.recipient-checkbox:checked');
             const message = document.getElementById("kakao-msg-content").value.trim();
             const date = document.getElementById("reserve-date").value;
             const time = document.getElementById("reserve-time").value;
 
             if (checkboxes.length === 0) {
-                alert("카카오톡을 전송할 원생을 최소 1명 이상 체크해주세요.");
+                alert("알림톡을 보낼 대상(학생/학부모)을 최소 1건 이상 체크해주세요.");
                 return;
             }
             if (!message) {
@@ -1276,16 +1390,25 @@
                 return;
             }
 
-            let studentNames = [];
+            const typeLabel = { student: '학생', parent: '학부모' };
+            let recipients = [];
             checkboxes.forEach(cb => {
-                studentNames.push(cb.getAttribute('data-name'));
+                recipients.push({
+                    name: cb.getAttribute('data-name'),
+                    type: cb.getAttribute('data-type'),
+                    phone: cb.getAttribute('data-phone') || ''
+                });
             });
+
+            const uniqueStudentNames = [...new Set(recipients.map(r => r.name))];
+            const recipientSummary = recipients.map(r => `${r.name}(${typeLabel[r.type] || r.type})`).join(', ');
 
             globalReservations.push({
                 id: Date.now(),
                 teacher: getCurrentActiveTeacher(),
-                studentCount: checkboxes.length,
-                students: studentNames,
+                studentCount: uniqueStudentNames.length,
+                students: uniqueStudentNames,
+                recipients: recipients,
                 message: message,
                 reserveAt: `${date} ${time}`,
                 status: '대기중'
@@ -1293,11 +1416,11 @@
 
             saveDataToSupabase('globalReservations', globalReservations);
 
-            alert(`[전송 예약 완료]\n- 선택된 원생: ${checkboxes.length}명 (${studentNames.join(', ')})\n- 예약 일시: ${date} ${time}`);
+            alert(`[전송 예약 완료]\n- 대상: ${recipients.length}건 (${recipientSummary})\n- 예약 일시: ${date} ${time}`);
             document.getElementById("kakao-msg-content").value = "";
             document.getElementById("reserve-date").value = "";
             document.getElementById("reserve-time").value = "";
-            document.querySelectorAll('.student-checkbox').forEach(cb => cb.checked = false);
+            document.querySelectorAll('.recipient-checkbox').forEach(cb => cb.checked = false);
             document.getElementById("select-all-checkbox").checked = false;
             updateSelectedCount();
         }
@@ -1318,7 +1441,11 @@
             }
 
             targetReservations.forEach(res => {
-                const studentNamesStr = res.students ? res.students.join(', ') : '정보 없음';
+                const typeLabel = { student: '학생', parent: '학부모' };
+                const studentNamesStr = res.recipients && res.recipients.length > 0
+                    ? res.recipients.map(r => `${r.name}(${typeLabel[r.type] || r.type})`).join(', ')
+                    : (res.students ? res.students.join(', ') : '정보 없음');
+                const targetCountLabel = res.recipients ? res.recipients.length : res.studentCount;
                 
                 let adminActionButtons = '';
                 if (isAdminLoggedIn) {
@@ -1333,7 +1460,7 @@
                     <div class="flex justify-between items-center">
                         <div class="flex items-center space-x-2">
                             <span class="px-2.5 py-1 bg-primary/10 text-primary rounded-lg text-xs font-bold">${res.teacher}T</span>
-                            <span class="text-xs text-zinc-600">대상: <b>${res.studentCount}명</b> (<span class="text-zinc-500">${studentNamesStr}</span>)</span>
+                            <span class="text-xs text-zinc-600">대상: <b>${targetCountLabel}건</b> (<span class="text-zinc-500">${studentNamesStr}</span>)</span>
                             <span class="text-xs text-zinc-400">| ${res.reserveAt}</span>
                         </div>
                         <span class="px-2 py-0.5 text-xs rounded font-semibold ${res.status === '전송완료' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}">${res.status}</span>
