@@ -1366,15 +1366,19 @@
                 let gradeRaw = gradeColIdx !== -1 && row[gradeColIdx] ? String(row[gradeColIdx]).trim() : "";
                 let gradeDigitMatch = gradeRaw.match(/\d+/);
                 let gradeDigit = gradeDigitMatch ? gradeDigitMatch[0] : "";
+                // 출석부 매칭(어느 강사/시간대에 배정할지)은 반명을 그대로 우선 사용
+                // → 예: "예비고1" 반명 학생은 실제 학년(청라중3)과 무관하게 그 반을 담당하는 강사 원생으로 들어가야 함
                 let schoolKey = classNameRaw || (school + gradeDigit).trim();
-                // 원생 정보에 저장할 학교 표시값(반명만 있을 경우 반명 자체를 사용)
-                let schoolForRecord = school || classNameRaw;
+                // 원생 정보에 표시/저장할 학교값은 학교+학년 조합을 우선 사용 (반명과 실제 학년이 다를 수 있으므로)
+                // → 예: 반명은 "예비고1"이어도 학교 컬럼이 "청라중", 학년 컬럼이 "3학년"이면 "청라중3"으로 표기
+                let schoolForRecord = school ? (school + gradeDigit) : classNameRaw;
 
                 let studentPhone = studentPhoneColIdx !== -1 && row[studentPhoneColIdx] ? String(row[studentPhoneColIdx]).trim() : "";
                 let parentPhone = parentPhoneColIdx !== -1 && row[parentPhoneColIdx] ? String(row[parentPhoneColIdx]).trim() : "";
                 let note = noteColIdx !== -1 && row[noteColIdx] ? String(row[noteColIdx]).trim() : "";
 
-                const displaySchool = schoolForRecord + (gradeRaw ? ` ${gradeRaw}` : "");
+                // schoolForRecord가 이미 학교+학년(또는 반명)을 포함하므로 그대로 표시에 사용
+                const displaySchool = schoolForRecord;
 
                 // 이미 등록되어 있는 원생인지 전체 강사 기준으로 확인 (동명이인은 학교/반명으로 구분)
                 const existing = findExistingStudentGlobally(name, schoolForRecord);
