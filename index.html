@@ -863,7 +863,7 @@
                     });
                 });
 
-                const gridStyle = `grid-template-columns: repeat(${teacherColumns.length}, 340px); grid-auto-rows: auto;`;
+                const gridStyle = `grid-template-columns: repeat(${teacherColumns.length}, 380px); grid-auto-rows: auto;`;
 
                 rowContainer.innerHTML = `
                     <div class="horizontal-scroll-container overflow-x-auto pb-3">
@@ -927,7 +927,7 @@
                     });
 
                     slotsHtml += `
-                        <div class="w-[340px] shrink-0 bg-zinc-50/50 p-4 rounded-xl border border-zinc-200 self-start">
+                        <div class="w-[380px] shrink-0 bg-zinc-50/50 p-4 rounded-xl border border-zinc-200 self-start">
                             <div class="flex justify-between items-center mb-3">
                                 <span class="text-xs font-bold text-zinc-700 truncate">${slot.title}</span>
                                 <button onclick="editSlotBox('${teacherName}', '${day}', '${slot.id}')" class="text-[10px] text-zinc-500 hover:text-primary font-semibold shrink-0 ml-2 bg-white px-2 py-1 rounded border border-zinc-200">수정 / 삭제</button>
