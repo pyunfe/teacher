@@ -163,12 +163,17 @@
 
                 <div class="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
                     <div class="md:col-span-5 bg-white p-5 rounded-2xl shadow-sm border border-zinc-200 space-y-3">
-                        <div class="flex justify-between items-center pb-2 border-b border-zinc-100">
-                            <label class="flex items-center space-x-2 cursor-pointer">
-                                <input type="checkbox" id="select-all-checkbox" onchange="toggleSelectAll(this)" class="w-4 h-4 text-primary rounded border-zinc-300 focus:ring-primary">
+                        <div class="pb-2 border-b border-zinc-100 space-y-2">
+                            <div class="flex justify-between items-center">
                                 <span class="font-bold text-sm text-zinc-800">전체 원생 목록 (가나다순)</span>
-                            </label>
-                            <span class="text-xs text-zinc-400" id="selected-count">0명 선택됨</span>
+                                <span class="text-xs text-zinc-400" id="selected-count">0건 선택됨</span>
+                            </div>
+                            <div class="flex items-center space-x-1.5">
+                                <span class="text-[11px] text-zinc-500 shrink-0">전체 선택:</span>
+                                <button onclick="selectAllRecipients('student')" class="text-[11px] bg-zinc-100 hover:bg-zinc-200 text-zinc-700 px-2.5 py-1 rounded-lg font-semibold transition">학생</button>
+                                <button onclick="selectAllRecipients('parent')" class="text-[11px] bg-zinc-100 hover:bg-zinc-200 text-zinc-700 px-2.5 py-1 rounded-lg font-semibold transition">학부모</button>
+                                <button onclick="selectAllRecipients('none')" class="text-[11px] text-zinc-400 hover:text-rose-600 px-2 py-1 rounded-lg font-semibold transition">선택 해제</button>
+                            </div>
                         </div>
                         <div class="pb-1">
                             <input type="text" id="management-search-input" oninput="handleManagementSearch(this.value)" placeholder="이름으로 검색..." class="w-full border border-zinc-300 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary">
@@ -923,8 +928,6 @@
             const data = teacherDataStore[teacherName];
             const students = data ? data.students : [];
 
-            document.getElementById("select-all-checkbox").checked = false;
-
             if (students.length === 0) {
                 listContainer.innerHTML = '<div class="text-xs text-zinc-400 py-6 text-center">등록된 원생이 없습니다.</div>';
                 updateSelectedCount();
@@ -969,9 +972,31 @@
             applyManagementSearchFilter();
         }
 
-        function toggleSelectAll(masterCheckbox) {
-            const checkboxes = document.querySelectorAll('.recipient-checkbox:not(:disabled)');
-            checkboxes.forEach(cb => cb.checked = masterCheckbox.checked);
+        // mode: 'student' | 'parent' | 'none'
+        // 검색 필터로 숨겨진(표시되지 않는) 원생은 대상에서 제외한다.
+        // '학생'과 '학부모' 버튼은 서로 독립적으로 동작 -> 둘 다 누르면 둘 다 선택된 상태가 된다.
+        function selectAllRecipients(mode) {
+            const visibleRows = Array.from(document.querySelectorAll('#management-student-list [data-student-name]'))
+                .filter(row => row.style.display !== 'none');
+
+            visibleRows.forEach(row => {
+                const studentCb = row.querySelector('.recipient-checkbox[data-type="student"]');
+                const parentCb = row.querySelector('.recipient-checkbox[data-type="parent"]');
+
+                if (mode === 'none') {
+                    if (studentCb) studentCb.checked = false;
+                    if (parentCb) parentCb.checked = false;
+                    return;
+                }
+
+                if (mode === 'student' && studentCb && !studentCb.disabled) {
+                    studentCb.checked = true;
+                }
+                if (mode === 'parent' && parentCb && !parentCb.disabled) {
+                    parentCb.checked = true;
+                }
+            });
+
             updateSelectedCount();
         }
 
@@ -1421,7 +1446,6 @@
             document.getElementById("reserve-date").value = "";
             document.getElementById("reserve-time").value = "";
             document.querySelectorAll('.recipient-checkbox').forEach(cb => cb.checked = false);
-            document.getElementById("select-all-checkbox").checked = false;
             updateSelectedCount();
         }
 
