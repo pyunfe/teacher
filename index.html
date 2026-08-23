@@ -355,7 +355,9 @@
             today.setHours(0, 0, 0, 0);
 
             const dayOfWeek = today.getDay(); 
-            let diffToSaturday = 6 - dayOfWeek;
+            // 금/토/일이 한 "주차"를 이룸: 일요일(0)은 어제(토요일)가 속한 주차를 가리켜야 하고,
+            // 월~목은 다가오는 주말 주차를, 금/토는 이번 주말 주차를 가리켜야 함.
+            let diffToSaturday = (dayOfWeek === 0) ? -1 : 6 - dayOfWeek;
             
             const currentSaturday = new Date(today);
             currentSaturday.setDate(today.getDate() + diffToSaturday);
@@ -863,7 +865,7 @@
                     });
                 });
 
-                const gridStyle = `grid-template-columns: repeat(${teacherColumns.length}, 385px); grid-auto-rows: auto;`;
+                const gridStyle = `grid-template-columns: repeat(${teacherColumns.length}, 380px); grid-auto-rows: auto;`;
 
                 rowContainer.innerHTML = `
                     <div class="horizontal-scroll-container overflow-x-auto pb-3">
@@ -927,7 +929,7 @@
                     });
 
                     slotsHtml += `
-                        <div class="w-[385px] shrink-0 bg-zinc-50/50 p-4 rounded-xl border border-zinc-200 self-start">
+                        <div class="w-[380px] shrink-0 bg-zinc-50/50 p-4 rounded-xl border border-zinc-200 self-start">
                             <div class="flex justify-between items-center mb-3">
                                 <span class="text-xs font-bold text-zinc-700 truncate">${slot.title}</span>
                                 <button onclick="editSlotBox('${teacherName}', '${day}', '${slot.id}')" class="text-[10px] text-zinc-500 hover:text-primary font-semibold shrink-0 ml-2 bg-white px-2 py-1 rounded border border-zinc-200">수정 / 삭제</button>
