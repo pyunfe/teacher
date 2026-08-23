@@ -741,6 +741,23 @@
             return hour;
         }
 
+        // 시간대 박스 제목(예: "청람중1 (오후 2시 - 오후 5시)")에서 시작~종료 시각을 24시간제로 추출
+        function parseSlotTimeRange(title) {
+            if (!title) return null;
+            const regex = /(오전|오후)\s*(\d{1,2})\s*시/g;
+            let m;
+            let hours = [];
+            while ((m = regex.exec(title)) !== null) {
+                let isPm = m[1] === '오후';
+                let hour = parseInt(m[2], 10);
+                if (isPm && hour < 12) hour += 12;
+                if (!isPm && hour === 12) hour = 0;
+                hours.push(hour);
+            }
+            if (hours.length === 0) return null;
+            return { start: hours[0], end: hours.length > 1 ? hours[1] : hours[0] };
+        }
+
         function getSortedSlots(slotsArray) {
             if (!slotsArray) return [];
             return [...slotsArray].sort((a, b) => parseSlotTime(a.title) - parseSlotTime(b.title));
@@ -865,7 +882,7 @@
                     });
                 });
 
-                const gridStyle = `grid-template-columns: repeat(${teacherColumns.length}, 385px); grid-auto-rows: auto;`;
+                const gridStyle = `grid-template-columns: repeat(${teacherColumns.length}, 380px); grid-auto-rows: auto;`;
 
                 rowContainer.innerHTML = `
                     <div class="horizontal-scroll-container overflow-x-auto pb-3">
@@ -929,7 +946,7 @@
                     });
 
                     slotsHtml += `
-                        <div class="w-[385px] shrink-0 bg-zinc-50/50 p-4 rounded-xl border border-zinc-200 self-start">
+                        <div class="w-[380px] shrink-0 bg-zinc-50/50 p-4 rounded-xl border border-zinc-200 self-start">
                             <div class="flex justify-between items-center mb-3">
                                 <span class="text-xs font-bold text-zinc-700 truncate">${slot.title}</span>
                                 <button onclick="editSlotBox('${teacherName}', '${day}', '${slot.id}')" class="text-[10px] text-zinc-500 hover:text-primary font-semibold shrink-0 ml-2 bg-white px-2 py-1 rounded border border-zinc-200">수정 / 삭제</button>
@@ -1199,14 +1216,44 @@
             closeStudentModal();
         }
 
-        function handleExcelUpload(event) {
-    const currentTeacher = getCurrentActiveTeacher();
-    if (currentTeacher === "통합출석부") {
-        alert("통합출석부 모드에서는 원생을 등록할 수 없습니다. 특정 강사를 선택한 후 업로드해주세요.");
-        event.target.value = "";
-        return;
-    }
+        // 전체 강사/전체 요일의 시간대 박스를 { teacherName, day, slot } 형태로 한 번에 수집
+        function collectAllSlotsAcrossTeachers() {
+            const all = [];
+            orderedTeacherNames.forEach(tName => {
+                if (!teacherDataStore[tName]) initDefaultTeacherData(tName);
+                const tData = teacherDataStore[tName];
+                ['friday', 'saturday', 'sunday'].forEach(day => {
+                    (tData.slots[day] || []).forEach(slot => {
+                        all.push({ teacherName: tName, day, slot });
+                    });
+                });
+            });
+            return all;
+        }
 
+        // 이름(+학교, 동명이인 구분용)으로 이미 등록된 원생을 전체 강사에서 검색
+        function findExistingStudentGlobally(name, school) {
+            const candidates = [];
+            orderedTeacherNames.forEach(tName => {
+                const tData = teacherDataStore[tName];
+                if (!tData || !tData.students) return;
+                tData.students.forEach(s => {
+                    if (s.name === name) candidates.push({ teacherName: tName, student: s });
+                });
+            });
+            if (candidates.length === 0) return { status: 'none' };
+            if (candidates.length === 1) return { status: 'unique', match: candidates[0] };
+
+            // 동명이인: 학교 정보로 구분 시도
+            if (school) {
+                const normalize = (str) => String(str || "").replace(/\s+/g, "");
+                const filtered = candidates.filter(c => normalize(c.student.school).includes(normalize(school)) || normalize(school).includes(normalize(c.student.school)));
+                if (filtered.length === 1) return { status: 'unique', match: filtered[0] };
+            }
+            return { status: 'ambiguous', candidates };
+        }
+
+        function handleExcelUpload(event) {
     const file = event.target.files[0];
     if (!file) return;
 
@@ -1215,12 +1262,12 @@
         try {
             const data = new Uint8Array(e.target.result);
             const workbook = XLSX.read(data, { type: 'array' });
-            
+
             const firstSheetName = workbook.SheetNames[0];
             const worksheet = workbook.Sheets[firstSheetName];
-            
+
             const jsonRows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-            
+
             if (jsonRows.length === 0) {
                 alert("엑셀 파일에 데이터가 없습니다.");
                 return;
@@ -1228,15 +1275,29 @@
 
             let headerRowIdx = 0;
             let nameColIdx = -1;
-            let schoolColIdx = -1;
+            let classColIdx = -1;   // '반명' - 이미 완성된 학교+학년 형태(예: 청람중1)
+            let schoolColIdx = -1;  // '반명'이 없을 때를 위한 대비용(학교)
+            let gradeColIdx = -1;   // '반명'이 없을 때를 위한 대비용(학년)
+            let parentPhoneColIdx = -1;
+            let studentPhoneColIdx = -1;
+            let noteColIdx = -1;
 
-            // 헤더 위치 및 이름/학교학년 컬럼 탐색
+            // 헤더 위치 및 이름/반명/전화번호/한줄메모 컬럼 탐색
             for (let i = 0; i < Math.min(jsonRows.length, 5); i++) {
                 let row = jsonRows[i];
                 for (let j = 0; j < row.length; j++) {
                     let cellVal = String(row[j] || "").trim();
-                    if (cellVal.includes("이름") || cellVal.includes("학생명")) nameColIdx = j;
-                    if (cellVal.includes("학교") || cellVal.includes("소속") || cellVal.includes("학년")) schoolColIdx = j;
+                    if (cellVal.includes("이름") || cellVal.includes("학생명") || cellVal.includes("성명")) nameColIdx = j;
+                    if (cellVal.includes("반명") || cellVal === "반" || cellVal.includes("소속반")) classColIdx = j;
+                    if (cellVal.includes("학교") || cellVal.includes("소속")) schoolColIdx = j;
+                    if (cellVal.includes("학년")) gradeColIdx = j;
+                    if (cellVal.includes("한줄메모") || cellVal.includes("메모")) noteColIdx = j;
+                    // '학부모/보호자/부모'가 포함된 헤더는 학부모 번호로, 나머지 번호/연락처/전화/HP 헤더는 원생 번호로 인식
+                    if (cellVal.includes("학부모") || cellVal.includes("보호자") || cellVal.includes("부모")) {
+                        parentPhoneColIdx = j;
+                    } else if (cellVal.includes("번호") || cellVal.includes("연락처") || cellVal.includes("전화") || cellVal.toLowerCase().includes("phone") || cellVal.toUpperCase().includes("HP")) {
+                        studentPhoneColIdx = j;
+                    }
                 }
                 if (nameColIdx !== -1) {
                     headerRowIdx = i;
@@ -1245,72 +1306,135 @@
             }
 
             if (nameColIdx === -1) {
-                nameColIdx = 0; 
+                nameColIdx = 0;
                 schoolColIdx = 1;
                 headerRowIdx = 0;
             } else {
                 headerRowIdx += 1;
             }
 
-            if (!teacherDataStore[currentTeacher]) initDefaultTeacherData(currentTeacher);
-            const tData = teacherDataStore[currentTeacher];
-
-            // 강사의 전체 시간대(반) 목록 수집
-            let allTeacherSlots = [];
-            ['friday', 'saturday', 'sunday'].forEach(day => {
-                if (tData.slots[day]) {
-                    allTeacherSlots = allTeacherSlots.concat(tData.slots[day]);
-                }
-            });
-
-            // 매칭 가능한 박스가 하나도 없으면 기본 박스 생성
-            if (allTeacherSlots.length === 0) {
-                const defaultSlotId = 'slot-saturday-' + Date.now();
-                const defaultSlot = { id: defaultSlotId, title: '정규반 (일괄등록)' };
-                tData.slots.saturday.push(defaultSlot);
-                allTeacherSlots.push(defaultSlot);
-            }
+            const allSlots = collectAllSlotsAcrossTeachers();
 
             let addedCount = 0;
-            let matchedCount = 0;
+            let exactMatchCount = 0;
+            let updatedCount = 0;
+            let unmatchedList = [];
+            let ambiguousList = [];
 
             for (let i = headerRowIdx; i < jsonRows.length; i++) {
                 let row = jsonRows[i];
                 if (!row || row.length === 0) continue;
 
                 let name = String(row[nameColIdx] || "").trim();
-                if (!name || name === "이름" || name === "학생명") continue;
+                if (!name || name === "이름" || name === "학생명" || name === "성명") continue;
 
-                let school = schoolColIdx !== -1 && row[schoolColIdx] ? String(row[schoolColIdx]).trim() : "통통통등록";
+                // '반명' 컬럼이 있으면 그 값을 그대로 매칭 키로 사용 (예: "청람중1")
+                // 없을 때만 학교+학년을 조합해서 대체 매칭 키를 만든다
+                let classNameRaw = classColIdx !== -1 && row[classColIdx] ? String(row[classColIdx]).trim() : "";
+                let school = schoolColIdx !== -1 && row[schoolColIdx] ? String(row[schoolColIdx]).trim() : "";
+                let gradeRaw = gradeColIdx !== -1 && row[gradeColIdx] ? String(row[gradeColIdx]).trim() : "";
+                let gradeDigitMatch = gradeRaw.match(/\d+/);
+                let gradeDigit = gradeDigitMatch ? gradeDigitMatch[0] : "";
+                let schoolKey = classNameRaw || (school + gradeDigit).trim();
+                // 원생 정보에 저장할 학교 표시값(반명만 있을 경우 반명 자체를 사용)
+                let schoolForRecord = school || classNameRaw;
 
-                let exists = tData.students.some(s => s.name === name);
-                if (!exists) {
-                    // 학교/학년 이름이 출석부 박스 제목에 포함되어 있는지 자동 검색 매칭
-                    let matchedSlot = allTeacherSlots.find(slot => {
-                        return school !== "통통통등록" && slot.title.includes(school);
-                    });
+                let studentPhone = studentPhoneColIdx !== -1 && row[studentPhoneColIdx] ? String(row[studentPhoneColIdx]).trim() : "";
+                let parentPhone = parentPhoneColIdx !== -1 && row[parentPhoneColIdx] ? String(row[parentPhoneColIdx]).trim() : "";
+                let note = noteColIdx !== -1 && row[noteColIdx] ? String(row[noteColIdx]).trim() : "";
 
-                    let targetSlotId = "";
-                    if (matchedSlot) {
-                        targetSlotId = matchedSlot.id;
-                        matchedCount++;
-                    } else {
-                        // 일치하는 반이 없을 경우 첫 번째 시간대 박스로 기본 배치
-                        targetSlotId = allTeacherSlots[0].id;
-                    }
+                const displaySchool = schoolForRecord + (gradeRaw ? ` ${gradeRaw}` : "");
 
-                    tData.students.push({
-                        name: name,
-                        school: school,
-                        slotIds: [targetSlotId]
-                    });
-                    addedCount++;
+                // 이미 등록되어 있는 원생인지 전체 강사 기준으로 확인 (동명이인은 학교/반명으로 구분)
+                const existing = findExistingStudentGlobally(name, schoolForRecord);
+                if (existing.status === 'unique') {
+                    let changed = false;
+                    if (studentPhone && !existing.match.student.phone) { existing.match.student.phone = studentPhone; changed = true; }
+                    if (parentPhone && !existing.match.student.parentPhone) { existing.match.student.parentPhone = parentPhone; changed = true; }
+                    if (changed) updatedCount++;
+                    continue;
                 }
+                if (existing.status === 'ambiguous') {
+                    ambiguousList.push(`${name}(${displaySchool || '학교정보없음'}) - 이미 동명이인으로 등록되어 있어 자동 처리 건너뜀`);
+                    continue;
+                }
+
+                if (!schoolKey) {
+                    unmatchedList.push(`${name} (반명/학교/학년 정보 없음)`);
+                    continue;
+                }
+
+                // 반명(또는 학교+학년) 문구가 시간대 박스 제목에 포함되는 후보들 수집
+                let candidates = allSlots.filter(c => c.slot.title.includes(schoolKey));
+
+                let noteHour = note ? parseSlotTime(note) : 9999;
+                let isExact = false;
+
+                if (candidates.length > 1 && noteHour !== 9999) {
+                    // 1순위: 한줄메모의 시작 시각과 정확히 일치하는 시간대
+                    let exactTimeMatches = candidates.filter(c => parseSlotTime(c.slot.title) === noteHour);
+                    if (exactTimeMatches.length >= 1) {
+                        candidates = exactTimeMatches;
+                        isExact = true;
+                    } else {
+                        // 2순위: 시간대 범위(시작~종료) 안에 포함되는 경우
+                        let rangeMatches = candidates.filter(c => {
+                            const range = parseSlotTimeRange(c.slot.title);
+                            return range && noteHour > range.start && noteHour < range.end;
+                        });
+                        if (rangeMatches.length >= 1) candidates = rangeMatches;
+                    }
+                } else if (candidates.length === 1) {
+                    isExact = true;
+                }
+
+                if (candidates.length === 0) {
+                    unmatchedList.push(`${name}(${displaySchool}${note ? ', ' + note : ''}) - 일치하는 출석부 시간대를 찾을 수 없음`);
+                    continue;
+                }
+                if (candidates.length > 1) {
+                    ambiguousList.push(`${name}(${displaySchool}${note ? ', ' + note : ''}) - 후보 ${candidates.length}건(${candidates.map(c => c.teacherName + 'T').join(', ')}), 시간 구분 불가`);
+                    continue;
+                }
+
+                const target = candidates[0];
+                if (!teacherDataStore[target.teacherName]) initDefaultTeacherData(target.teacherName);
+                const tData = teacherDataStore[target.teacherName];
+
+                tData.students.push({
+                    name: name,
+                    school: schoolForRecord || "미입력",
+                    grade: gradeDigit,
+                    phone: studentPhone,
+                    parentPhone: parentPhone,
+                    slotIds: [target.slot.id]
+                });
+                addedCount++;
+                if (isExact) exactMatchCount++;
             }
 
-            renderFullApp(currentTeacher);
+            const activeTeacher = getCurrentActiveTeacher();
+            if (activeTeacher === "통합출석부") {
+                renderIntegratedTimetable();
+                renderManagementStudents("황성웅");
+            } else {
+                renderFullApp(activeTeacher);
+            }
             saveDataToSupabase('teacherDataStore', teacherDataStore);
-            alert(`[일괄 등록 완료]\n총 ${addedCount}명의 원생 등록 완료!\n(학교/학년 자동 매칭 배치: ${matchedCount}명)`);
+
+            let msg = `[일괄 등록 완료]\n총 ${addedCount}명의 원생을 학교/학년/시간대 자동 조회로 등록했습니다.\n(정확 매칭: ${exactMatchCount}명)`;
+            if (updatedCount > 0) msg += `\n기존 등록된 원생 연락처 업데이트: ${updatedCount}명`;
+            if (unmatchedList.length > 0) {
+                msg += `\n\n⚠️ 일치하는 시간대를 찾지 못해 등록되지 않음: ${unmatchedList.length}명`;
+                msg += `\n(${unmatchedList.slice(0, 15).join(' / ')}${unmatchedList.length > 15 ? ' 외 다수' : ''})`;
+                msg += `\n→ '+ 원생 신규 등록'으로 직접 추가해주세요.`;
+            }
+            if (ambiguousList.length > 0) {
+                msg += `\n\n⚠️ 후보가 여러 곳이라 안전하게 건너뜀: ${ambiguousList.length}명`;
+                msg += `\n(${ambiguousList.slice(0, 15).join(' / ')}${ambiguousList.length > 15 ? ' 외 다수' : ''})`;
+                msg += `\n→ 원생 관리에서 직접 확인 후 추가해주세요.`;
+            }
+            alert(msg);
 
         } catch (err) {
             console.error(err);
