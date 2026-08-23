@@ -758,6 +758,37 @@
             return { start: hours[0], end: hours.length > 1 ? hours[1] : hours[0] };
         }
 
+        // 한줄메모(예: "8/23(일) 오후 2시 신규")에서 금/토/일 요일을 추출
+        // 1) "금요일/토요일/일요일" 정식 표기 → 2) 괄호 안 요일 한 글자 "(금)(토)(일)" → 3) 날짜(M/D)로 요일 계산 순으로 시도
+        function parseNoteDayKey(text) {
+            if (!text) return null;
+
+            if (text.includes('금요일')) return 'friday';
+            if (text.includes('토요일')) return 'saturday';
+            if (text.includes('일요일')) return 'sunday';
+
+            const markerMatch = text.match(/\(([금토일])\)/);
+            if (markerMatch) {
+                return { '금': 'friday', '토': 'saturday', '일': 'sunday' }[markerMatch[1]] || null;
+            }
+
+            const dateMatch = text.match(/(\d{1,2})\s*[\/\.]\s*(\d{1,2})/);
+            if (dateMatch) {
+                const month = parseInt(dateMatch[1], 10);
+                const day = parseInt(dateMatch[2], 10);
+                const now = new Date();
+                const candidateDate = new Date(now.getFullYear(), month - 1, day);
+                if (!isNaN(candidateDate.getTime())) {
+                    const weekday = candidateDate.getDay(); // 0:일 1:월 ... 5:금 6:토
+                    if (weekday === 5) return 'friday';
+                    if (weekday === 6) return 'saturday';
+                    if (weekday === 0) return 'sunday';
+                }
+            }
+
+            return null;
+        }
+
         function getSortedSlots(slotsArray) {
             if (!slotsArray) return [];
             return [...slotsArray].sort((a, b) => parseSlotTime(a.title) - parseSlotTime(b.title));
@@ -1367,6 +1398,14 @@
                 // 반명(또는 학교+학년) 문구가 시간대 박스 제목에 포함되는 후보들 수집
                 let candidates = allSlots.filter(c => c.slot.title.includes(schoolKey));
 
+                // 한줄메모에서 요일(금/토/일)을 판별할 수 있으면 먼저 요일로 후보를 좁힌다
+                // (예: 같은 반명이 토요일 오후 2시반, 일요일 오후 2시반에 모두 있는 경우를 구분)
+                let noteDay = note ? parseNoteDayKey(note) : null;
+                if (candidates.length > 1 && noteDay) {
+                    let dayMatches = candidates.filter(c => c.day === noteDay);
+                    if (dayMatches.length >= 1) candidates = dayMatches;
+                }
+
                 let noteHour = note ? parseSlotTime(note) : 9999;
                 let isExact = false;
 
@@ -1393,7 +1432,8 @@
                     continue;
                 }
                 if (candidates.length > 1) {
-                    ambiguousList.push(`${name}(${displaySchool}${note ? ', ' + note : ''}) - 후보 ${candidates.length}건(${candidates.map(c => c.teacherName + 'T').join(', ')}), 시간 구분 불가`);
+                    const dayShort = { friday: '금', saturday: '토', sunday: '일' };
+                    ambiguousList.push(`${name}(${displaySchool}${note ? ', ' + note : ''}) - 후보 ${candidates.length}건(${candidates.map(c => `${c.teacherName}T ${dayShort[c.day] || c.day}`).join(', ')}), 요일/시간 구분 불가`);
                     continue;
                 }
 
