@@ -6,7 +6,6 @@
     <title>국성티처</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css" rel="stylesheet"/>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script>
@@ -24,9 +23,7 @@
     <style>
         body { font-family: 'Pretendard Variable', sans-serif; }
         main { zoom: 1.25; }
-        .student-block { cursor: grab; transition: all 0.15s; }
-        .student-block:active { cursor: grabbing; }
-        .sortable-ghost { opacity: 0.4; background: #e5e7eb !important; }
+        .student-block { transition: all 0.15s; }
         .horizontal-scroll-container::-webkit-scrollbar { height: 8px; }
         .horizontal-scroll-container::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
         .horizontal-scroll-container::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
@@ -40,7 +37,7 @@
             <h1 class="text-2xl font-bold text-primary mb-2 tracking-tight">국성티처</h1>
             <p class="text-zinc-500 mb-6 text-sm">중·고등부 학원 관리 시스템 로그인</p>
             <div class="space-y-4">
-                <input type="password" id="login-input" placeholder="전화번호 뒷4자리" maxlength="4" 
+                <input type="password" id="login-input" placeholder="전화번호 뒷4자리" maxlength="20" 
                     onkeydown="if(event.key === 'Enter') handleLogin()"
                     class="w-full px-4 py-3 border border-zinc-300 rounded-xl text-center text-lg tracking-widest focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary">
                 <button onclick="handleLogin()" class="w-full bg-primary text-white py-3 rounded-xl font-semibold hover:bg-primary-hover transition">
@@ -156,6 +153,10 @@
                         <button onclick="document.getElementById('excel-file-input').click()" class="bg-emerald-700 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-emerald-800 transition">
                             📁 통통통 엑셀 일괄 등록
                         </button>
+                        <input type="file" id="phone-excel-file-input" accept=".xlsx, .xls, .csv" style="display: none;" onchange="handlePhoneExcelUpload(event)">
+                        <button onclick="document.getElementById('phone-excel-file-input').click()" class="bg-sky-700 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-sky-800 transition">
+                            ☎️ 전화번호 일괄 업데이트
+                        </button>
                         <button onclick="addNewManagementStudent()" class="bg-zinc-800 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-zinc-900 transition">+ 원생 신규 등록</button>
                     </div>
                 </div>
@@ -245,8 +246,7 @@
             "9565": "황성웅", "9414": "정다운", "9062": "김신형", "2368": "문지현",
             "9248": "강윤지", "3374": "이현영", "2428": "김명일",
             "1357": "김준영", "1316": "박신언", "5282": "윤태민",
-            "9270": "고광준", "4782": "이영찬", "5068": "오세현",
-            "qkrdbscjf": "관리자"
+            "9270": "고광준", "4782": "이영찬", "5068": "오세현"
         };
 
         const orderedTeacherNames = [
@@ -344,7 +344,6 @@
         window.addEventListener("DOMContentLoaded", async () => {
             initWeeks();
             await loadDataFromSupabase();
-            initDragAndDrop();
         });
 
         async function handleLogin() {
@@ -359,7 +358,7 @@
             const adminResBtn = document.getElementById("tab-admin-reservations-btn");
             initWeeks();
 
-            if (inputVal === "8566") {
+            if (inputVal === "admin8566") {
                 isAdminLoggedIn = true;
                 document.getElementById("user-badge").innerText = "관리자 모드 (전체 권한)";
                 document.getElementById("admin-selector-wrapper").classList.remove("hidden");
@@ -423,48 +422,6 @@
             document.getElementById("label-friday").innerText = `금요일 (${fri})`;
             document.getElementById("label-saturday").innerText = `토요일 (${sat})`;
             document.getElementById("label-sunday").innerText = `일요일 (${sun})`;
-        }
-
-        function initDragAndDrop() {
-            const dropzones = document.querySelectorAll('.dropzone');
-            dropzones.forEach(zone => {
-                if (!zone.getAttribute('data-sortable')) {
-                    new Sortable(zone, {
-                        group: 'shared-timetable',
-                        animation: 150,
-                        ghostClass: 'sortable-ghost',
-                        scroll: true,
-                        scrollSensitivity: 80,
-                        scrollSpeed: 15,
-                        bubbleScroll: true,
-                        forceAutoScrollFallback: true,
-                        onEnd: function (evt) {
-                            const itemEl = evt.item;
-                            const targetZone = evt.to;
-                            const sourceZone = evt.from;
-                            const studentName = itemEl.getAttribute('data-student-name');
-                            const newSlotId = targetZone.getAttribute('data-slot-id');
-                            const oldSlotId = sourceZone.getAttribute('data-slot-id');
-                            
-                            const currentTeacher = getCurrentActiveTeacher();
-                            if (currentTeacher && currentTeacher !== "통합출석부" && teacherDataStore[currentTeacher]) {
-                                const studentObj = teacherDataStore[currentTeacher].students.find(s => s.name === studentName);
-                                if (studentObj) {
-                                    let ids = getStudentSlotIds(studentObj);
-                                    ids = ids.filter(id => id !== oldSlotId);
-                                    if (!ids.includes(newSlotId)) ids.push(newSlotId);
-                                    studentObj.slotIds = ids;
-                                    delete studentObj.slotId;
-                                    sortStudentsAlphabetically(currentTeacher);
-                                    renderFullApp(currentTeacher);
-                                    saveDataToSupabase('teacherDataStore', teacherDataStore);
-                                }
-                            }
-                        }
-                    });
-                    zone.setAttribute('data-sortable', 'true');
-                }
-            });
         }
 
         // ===== 다중 시간표 등록 지원 헬퍼 =====
@@ -680,35 +637,35 @@
             renderManagementStudents(teacherName);
         }
 
-        function getStudentRecord(studentName) {
+        function getRecordKey(studentName, slotId) {
+            return `${studentName}__${slotId}`;
+        }
+
+        function getStudentRecord(studentName, slotId) {
             if (!attendanceRecords[currentSelectedWeek]) {
                 attendanceRecords[currentSelectedWeek] = {};
             }
-            if (!attendanceRecords[currentSelectedWeek][studentName]) {
-                attendanceRecords[currentSelectedWeek][studentName] = { status: '출석', memo: '' };
+            const key = getRecordKey(studentName, slotId);
+            if (!attendanceRecords[currentSelectedWeek][key]) {
+                // 시간표별 개별 기록 도입 전 데이터(학생 이름만으로 저장된 기록)가 있으면 초기값으로 승계
+                const legacy = attendanceRecords[currentSelectedWeek][studentName];
+                attendanceRecords[currentSelectedWeek][key] = legacy
+                    ? { status: legacy.status, memo: legacy.memo }
+                    : { status: '출석', memo: '' };
             }
-            return attendanceRecords[currentSelectedWeek][studentName];
+            return attendanceRecords[currentSelectedWeek][key];
         }
 
-        function updateStudentStatus(studentName, status) {
-            const rec = getStudentRecord(studentName);
+        function updateStudentStatus(studentName, slotId, status) {
+            const rec = getStudentRecord(studentName, slotId);
             rec.status = status;
             saveDataToSupabase('attendanceRecords', attendanceRecords);
         }
 
-        function updateStudentMemo(studentName, memoText) {
-            const rec = getStudentRecord(studentName);
+        function updateStudentMemo(studentName, slotId, memoText) {
+            const rec = getStudentRecord(studentName, slotId);
             rec.memo = memoText;
             saveDataToSupabase('attendanceRecords', attendanceRecords);
-
-            // 한 학생이 여러 시간표에 등록된 경우, 다른 블록의 비고도 함께 동기화
-            document.querySelectorAll('.student-block').forEach(block => {
-                if (block.getAttribute('data-student-name') !== studentName) return;
-                const input = block.querySelector('input[type="text"]');
-                if (input && document.activeElement !== input) {
-                    input.value = memoText;
-                }
-            });
         }
 
         function renderIntegratedTimetable() {
@@ -743,7 +700,7 @@
                         let studentsHtml = "";
 
                         slotStudents.forEach(s => {
-                            const rec = getStudentRecord(s.name);
+                            const rec = getStudentRecord(s.name, slot.id);
                             const isAtt = rec.status === '출석';
 
                             const attBtnClass = isAtt ? "bg-[#dcfce7] text-[#15803d] font-bold" : "bg-zinc-100 text-zinc-500 font-semibold";
@@ -756,12 +713,12 @@
                                         <span class="text-[10px] text-zinc-500">(${s.school})</span>
                                     </div>
                                     <div class="flex items-center space-x-1 shrink-0 mr-1.5">
-                                        <button onclick="handleStatusClick('${s.name}', '출석', this)" class="px-2 py-0.5 text-[11px] rounded ${attBtnClass} status-btn">출석</button>
-                                        <button onclick="handleStatusClick('${s.name}', '결석', this)" class="px-2 py-0.5 text-[11px] rounded ${absBtnClass} status-btn">결석</button>
+                                        <button onclick="handleStatusClick('${s.name}', '${slot.id}', '출석', this)" class="px-2 py-0.5 text-[11px] rounded ${attBtnClass} status-btn">출석</button>
+                                        <button onclick="handleStatusClick('${s.name}', '${slot.id}', '결석', this)" class="px-2 py-0.5 text-[11px] rounded ${absBtnClass} status-btn">결석</button>
                                     </div>
                                     <div class="flex-1 min-w-0">
                                         <input type="text" placeholder="비고" value="${rec.memo}" 
-                                            oninput="updateStudentMemo('${s.name}', this.value)"
+                                            oninput="updateStudentMemo('${s.name}', '${slot.id}', this.value)"
                                             class="w-full text-[11px] border border-zinc-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary text-zinc-700 bg-white">
                                     </div>
                                 </div>
@@ -818,7 +775,7 @@
                     let studentsHtml = "";
 
                     slotStudents.forEach(s => {
-                        const rec = getStudentRecord(s.name);
+                        const rec = getStudentRecord(s.name, slot.id);
                         const isAtt = rec.status === '출석';
                         
                         const attBtnClass = isAtt ? "bg-[#dcfce7] text-[#15803d] font-bold" : "bg-zinc-100 text-zinc-500 font-semibold";
@@ -831,12 +788,12 @@
                                     <span class="text-[10px] text-zinc-500">(${s.school})</span>
                                 </div>
                                 <div class="flex items-center space-x-1 shrink-0 mr-1.5">
-                                    <button onclick="handleStatusClick('${s.name}', '출석', this)" class="px-2 py-0.5 text-[11px] rounded ${attBtnClass} status-btn">출석</button>
-                                    <button onclick="handleStatusClick('${s.name}', '결석', this)" class="px-2 py-0.5 text-[11px] rounded ${absBtnClass} status-btn">결석</button>
+                                    <button onclick="handleStatusClick('${s.name}', '${slot.id}', '출석', this)" class="px-2 py-0.5 text-[11px] rounded ${attBtnClass} status-btn">출석</button>
+                                    <button onclick="handleStatusClick('${s.name}', '${slot.id}', '결석', this)" class="px-2 py-0.5 text-[11px] rounded ${absBtnClass} status-btn">결석</button>
                                 </div>
                                 <div class="flex-1 min-w-0">
                                     <input type="text" placeholder="비고" value="${rec.memo}" 
-                                        oninput="updateStudentMemo('${s.name}', this.value)"
+                                        oninput="updateStudentMemo('${s.name}', '${slot.id}', this.value)"
                                         class="w-full text-[11px] border border-zinc-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary text-zinc-700 bg-white">
                                 </div>
                             </div>
@@ -849,7 +806,7 @@
                                 <span class="text-xs font-bold text-zinc-700 truncate">${slot.title}</span>
                                 <button onclick="editSlotBox('${teacherName}', '${day}', '${slot.id}')" class="text-[10px] text-zinc-500 hover:text-primary font-semibold shrink-0 ml-2 bg-white px-2 py-1 rounded border border-zinc-200">수정 / 삭제</button>
                             </div>
-                            <div class="space-y-1.5 dropzone" data-slot-id="${slot.id}">${studentsHtml}</div>
+                            <div class="space-y-1.5">${studentsHtml}</div>
                         </div>
                     `;
                 });
@@ -857,28 +814,23 @@
                 rowContainer.innerHTML = slotsHtml;
             });
 
-            initDragAndDrop();
             applyAttendanceSearchFilter();
         }
 
-        function handleStatusClick(studentName, status, btnElement) {
-            updateStudentStatus(studentName, status);
+        function handleStatusClick(studentName, slotId, status, btnElement) {
+            updateStudentStatus(studentName, slotId, status);
+            const parentContainer = btnElement.parentElement;
+            const buttons = parentContainer.querySelectorAll('.status-btn');
 
-            // 한 학생이 여러 시간표에 등록된 경우, 모든 블록의 출석/결석 버튼을 함께 동기화
-            document.querySelectorAll('.student-block').forEach(block => {
-                if (block.getAttribute('data-student-name') !== studentName) return;
-                const buttons = block.querySelectorAll('.status-btn');
-                buttons.forEach(btn => {
-                    btn.className = "px-2 py-0.5 text-[11px] rounded font-semibold bg-zinc-100 text-zinc-500 status-btn";
-                });
-                buttons.forEach(btn => {
-                    if (btn.innerText.trim() === status) {
-                        btn.className = status === '출석'
-                            ? "px-2 py-0.5 text-[11px] rounded font-bold bg-[#dcfce7] text-[#15803d] status-btn"
-                            : "px-2 py-0.5 text-[11px] rounded font-bold bg-[#fee2e2] text-[#b91c1c] status-btn";
-                    }
-                });
+            buttons.forEach(btn => {
+                btn.className = "px-2 py-0.5 text-[11px] rounded font-semibold bg-zinc-100 text-zinc-500 status-btn";
             });
+
+            if (status === '출석') {
+                btnElement.className = "px-2 py-0.5 text-[11px] rounded font-bold bg-[#dcfce7] text-[#15803d] status-btn";
+            } else {
+                btnElement.className = "px-2 py-0.5 text-[11px] rounded font-bold bg-[#fee2e2] text-[#b91c1c] status-btn";
+            }
         }
 
         function renderManagementStudents(teacherName) {
@@ -899,12 +851,16 @@
                 const item = document.createElement("div");
                 item.className = "flex items-center justify-between p-2.5 rounded-xl border border-zinc-200 bg-zinc-50/50 hover:bg-white transition";
                 item.setAttribute('data-student-name', s.name);
+                const phoneDisplay = s.phone
+                    ? `<span class="text-[11px] text-zinc-500 ml-1">${s.phone}</span>`
+                    : `<span class="text-[11px] text-zinc-300 ml-1">번호없음</span>`;
                 item.innerHTML = `
                     <div class="flex items-center space-x-3 overflow-hidden">
                         <input type="checkbox" data-index="${idx}" data-name="${s.name}" onchange="updateSelectedCount()" class="student-checkbox w-4 h-4 text-primary rounded border-zinc-300 focus:ring-primary">
                         <div class="truncate">
                             <span class="font-bold text-xs text-zinc-900">${s.name}</span>
                             <span class="text-[11px] text-zinc-500">(${s.school})</span>
+                            ${phoneDisplay}
                         </div>
                     </div>
                     <div class="flex items-center space-x-1 shrink-0">
@@ -967,6 +923,7 @@
             const name = prompt("추가할 원생 이름을 입력하세요:");
             if (!name) return;
             const school = prompt("학교 또는 소속을 입력하세요 (예: 청라중1):") || "미입력";
+            const phone = prompt("전화번호를 입력하세요 (선택 사항, 예: 010-1234-5678):") || "";
 
             let slotMsg = "배치할 시간대 번호를 선택하세요. (2개 이상 등록 시 쉼표로 구분, 예: 1,3):\n";
             allSlots.forEach((slot, idx) => { slotMsg += `${idx + 1}. ${slot.label}\n`; });
@@ -979,7 +936,7 @@
                 return;
             }
 
-            data.students.push({ name, school, slotIds: chosenIds });
+            data.students.push({ name, school, phone: phone.trim(), slotIds: chosenIds });
             renderFullApp(currentTeacher);
             saveDataToSupabase('teacherDataStore', teacherDataStore);
             alert(`"${name}" 원생이 성공적으로 등록되었습니다. (${chosenIds.length}개 시간표 등록)`);
@@ -999,6 +956,9 @@
 
             const newSchool = prompt("학교/소속을 수정하세요:", student.school);
             if (newSchool === null) return;
+
+            const newPhone = prompt("전화번호를 수정하세요 (예: 010-1234-5678):", student.phone || "");
+            if (newPhone === null) return;
 
             let allSlots = [];
             const dayNameKo = { friday: '금', saturday: '토', sunday: '일' };
@@ -1022,6 +982,7 @@
                 alert("등록된 시간대 박스가 없습니다.");
                 student.name = newName.trim();
                 student.school = newSchool.trim();
+                student.phone = newPhone.trim();
                 renderFullApp(teacherName);
                 saveDataToSupabase('teacherDataStore', teacherDataStore);
                 return;
@@ -1038,9 +999,10 @@
 
             const chosenIds = parseSlotChoiceInput(slotChoice, allSlots);
             if (chosenIds.length === 0) {
-                alert("잘못된 선택입니다. 이름과 학교만 우선 수정됩니다.");
+                alert("잘못된 선택입니다. 이름, 학교, 전화번호만 우선 수정됩니다.");
                 student.name = newName.trim();
                 student.school = newSchool.trim();
+                student.phone = newPhone.trim();
                 renderFullApp(teacherName);
                 saveDataToSupabase('teacherDataStore', teacherDataStore);
                 return;
@@ -1048,6 +1010,7 @@
 
             student.name = newName.trim();
             student.school = newSchool.trim();
+            student.phone = newPhone.trim();
             student.slotIds = chosenIds;
             delete student.slotId;
 
@@ -1178,6 +1141,113 @@
     };
     reader.readAsArrayBuffer(file);
 }
+
+        function handlePhoneExcelUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+
+                    const jsonRows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+                    if (jsonRows.length === 0) {
+                        alert("엑셀 파일에 데이터가 없습니다.");
+                        return;
+                    }
+
+                    let headerRowIdx = 0;
+                    let nameColIdx = -1;
+                    let schoolColIdx = -1;
+                    let phoneColIdx = -1;
+
+                    // 헤더 위치 및 이름/학교/전화번호 컬럼 탐색
+                    for (let i = 0; i < Math.min(jsonRows.length, 5); i++) {
+                        let row = jsonRows[i];
+                        for (let j = 0; j < row.length; j++) {
+                            let cellVal = String(row[j] || "").trim();
+                            if (cellVal.includes("이름") || cellVal.includes("학생명")) nameColIdx = j;
+                            if (cellVal.includes("학교") || cellVal.includes("소속") || cellVal.includes("학년")) schoolColIdx = j;
+                            if (cellVal.includes("번호") || cellVal.includes("연락처") || cellVal.includes("전화") || cellVal.toLowerCase().includes("phone")) phoneColIdx = j;
+                        }
+                        if (nameColIdx !== -1 && phoneColIdx !== -1) {
+                            headerRowIdx = i;
+                            break;
+                        }
+                    }
+
+                    if (nameColIdx === -1 || phoneColIdx === -1) {
+                        alert("엑셀에서 '이름'과 '전화번호(연락처)' 컬럼을 찾을 수 없습니다. 헤더 행을 확인해주세요.");
+                        return;
+                    }
+                    headerRowIdx += 1;
+
+                    let matchedCount = 0;
+                    let notFoundNames = [];
+
+                    for (let i = headerRowIdx; i < jsonRows.length; i++) {
+                        let row = jsonRows[i];
+                        if (!row || row.length === 0) continue;
+
+                        let name = String(row[nameColIdx] || "").trim();
+                        if (!name || name === "이름" || name === "학생명") continue;
+
+                        let school = schoolColIdx !== -1 && row[schoolColIdx] ? String(row[schoolColIdx]).trim() : "";
+                        let phone = String(row[phoneColIdx] || "").trim();
+                        if (!phone) continue;
+
+                        // 모든 강사 데이터에서 이름(+학교 일치 시 우선)으로 매칭해 번호만 채움
+                        let found = false;
+                        for (let tName in teacherDataStore) {
+                            const tData = teacherDataStore[tName];
+                            if (!tData || !tData.students) continue;
+
+                            let candidates = tData.students.filter(s => s.name === name);
+                            if (candidates.length > 1 && school) {
+                                const schoolMatched = candidates.filter(s => s.school === school);
+                                if (schoolMatched.length > 0) candidates = schoolMatched;
+                            }
+
+                            if (candidates.length > 0) {
+                                candidates.forEach(s => { s.phone = phone; });
+                                found = true;
+                            }
+                        }
+
+                        if (found) {
+                            matchedCount++;
+                        } else {
+                            notFoundNames.push(name);
+                        }
+                    }
+
+                    renderFullApp(getCurrentActiveTeacher());
+                    saveDataToSupabase('teacherDataStore', teacherDataStore);
+
+                    let msg = `[전화번호 일괄 업데이트 완료]\n번호가 등록된 원생: ${matchedCount}명`;
+                    if (notFoundNames.length > 0) {
+                        msg += `\n일치하는 원생을 찾지 못함: ${notFoundNames.length}명`;
+                        if (notFoundNames.length <= 15) {
+                            msg += `\n(${notFoundNames.join(', ')})`;
+                        }
+                    }
+                    alert(msg);
+
+                } catch (err) {
+                    console.error(err);
+                    alert("엑셀 파일을 읽는 중 오류가 발생했습니다.");
+                } finally {
+                    event.target.value = "";
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
 
         function deleteManagementStudent(teacherName, index) {
             if (confirm("정말 이 원생을 목록에서 삭제하시겠습니까?")) {
