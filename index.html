@@ -165,7 +165,7 @@
                     <div class="md:col-span-5 bg-white p-5 rounded-2xl shadow-sm border border-zinc-200 space-y-3">
                         <div class="pb-2 border-b border-zinc-100 space-y-2">
                             <div class="flex justify-between items-center">
-                                <span class="font-bold text-sm text-zinc-800">전체 원생 목록 (가나다순)</span>
+                                <span class="font-bold text-sm text-zinc-800">전체 원생 목록 (가나다순) <span id="management-total-count" class="text-zinc-400 font-normal"></span></span>
                                 <span class="text-xs text-zinc-400" id="selected-count">0건 선택됨</span>
                             </div>
                             <div class="flex items-center space-x-1.5">
@@ -175,8 +175,11 @@
                                 <button onclick="selectAllRecipients('none')" class="text-[11px] text-zinc-400 hover:text-rose-600 px-2 py-1 rounded-lg font-semibold transition">선택 해제</button>
                             </div>
                         </div>
-                        <div class="pb-1">
-                            <input type="text" id="management-search-input" oninput="handleManagementSearch(this.value)" placeholder="이름으로 검색..." class="w-full border border-zinc-300 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary">
+                        <div class="pb-1 flex items-center space-x-1.5">
+                            <input type="text" id="management-search-input" oninput="handleManagementSearch(this.value)" placeholder="이름으로 검색..." class="flex-1 border border-zinc-300 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary">
+                            <select id="management-school-filter" onchange="handleManagementSchoolFilter(this.value)" class="border border-zinc-300 rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-primary max-w-[110px]">
+                                <option value="">전체 학교</option>
+                            </select>
                         </div>
                         <div id="management-student-list" class="space-y-2 max-h-[500px] overflow-y-auto pr-1"></div>
                     </div>
@@ -295,6 +298,7 @@
         var weeklyOverrides = {};
         var attendanceSearchQuery = "";
         var managementSearchQuery = "";
+        var managementSchoolFilter = "";
         var moveModalStudentName = null;
         var moveModalTeacherName = null;
 
@@ -558,12 +562,52 @@
             applyManagementSearchFilter();
         }
 
+        function handleManagementSchoolFilter(value) {
+            managementSchoolFilter = value;
+            applyManagementSearchFilter();
+        }
+
         function applyManagementSearchFilter() {
             const q = managementSearchQuery;
-            document.querySelectorAll('#management-student-list [data-student-name]').forEach(item => {
+            const schoolFilter = managementSchoolFilter;
+            const items = document.querySelectorAll('#management-student-list [data-student-name]');
+            let visibleCount = 0;
+
+            items.forEach(item => {
                 const name = item.getAttribute('data-student-name') || '';
-                item.style.display = (!q || name.includes(q)) ? '' : 'none';
+                const school = item.getAttribute('data-student-school') || '';
+                const matchesName = !q || name.includes(q);
+                const matchesSchool = !schoolFilter || school === schoolFilter;
+                const show = matchesName && matchesSchool;
+                item.style.display = show ? '' : 'none';
+                if (show) visibleCount++;
             });
+
+            updateManagementTotalCount(items.length, visibleCount);
+        }
+
+        function updateManagementTotalCount(total, visible) {
+            const el = document.getElementById("management-total-count");
+            if (!el) return;
+            el.innerText = (visible !== total) ? `(총 ${total}명 중 ${visible}명 표시)` : `(총 ${total}명)`;
+        }
+
+        // 원생 목록에서 등장하는 학교 목록으로 학교 필터 드롭다운을 갱신 (기존 선택값 유지)
+        function populateManagementSchoolFilter(students) {
+            const select = document.getElementById("management-school-filter");
+            if (!select) return;
+            const schools = Array.from(new Set(students.map(s => s.school).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'ko'));
+            const prevValue = managementSchoolFilter;
+
+            select.innerHTML = '<option value="">전체 학교</option>' +
+                schools.map(sc => `<option value="${sc}">${sc}</option>`).join('');
+
+            if (prevValue && schools.includes(prevValue)) {
+                select.value = prevValue;
+            } else {
+                managementSchoolFilter = "";
+                select.value = "";
+            }
         }
 
         // ===== 학생 블록 더블클릭 -> 시간표 등록(다중 선택) 관리 모달 =====
@@ -905,7 +949,7 @@
                         cardsHtml += `
                             <div class="bg-zinc-50/50 p-4 rounded-xl border border-zinc-200" style="grid-column: ${colIdx + 1}; grid-row: ${slotIdx + 1};">
                                 <div class="flex justify-between items-center mb-3">
-                                    <span class="text-xs font-bold text-zinc-700 truncate"><span class="text-primary">[${tName}T]</span> ${slot.title}</span>
+                                    <span class="text-xs font-bold text-zinc-700 truncate"><span class="text-primary">[${tName}T]</span> ${slot.title} <span class="text-zinc-400 font-semibold">(${slotStudents.length}명)</span></span>
                                 </div>
                                 <div class="space-y-1.5">${studentsHtml}</div>
                             </div>
@@ -979,7 +1023,7 @@
                     slotsHtml += `
                         <div class="w-[385px] shrink-0 bg-zinc-50/50 p-4 rounded-xl border border-zinc-200 self-start">
                             <div class="flex justify-between items-center mb-3">
-                                <span class="text-xs font-bold text-zinc-700 truncate">${slot.title}</span>
+                                <span class="text-xs font-bold text-zinc-700 truncate">${slot.title} <span class="text-zinc-400 font-semibold">(${slotStudents.length}명)</span></span>
                                 <button onclick="editSlotBox('${teacherName}', '${day}', '${slot.id}')" class="text-[10px] text-zinc-500 hover:text-primary font-semibold shrink-0 ml-2 bg-white px-2 py-1 rounded border border-zinc-200">수정 / 삭제</button>
                             </div>
                             <div class="space-y-1.5">${studentsHtml}</div>
@@ -1010,53 +1054,106 @@
         }
 
         function renderManagementStudents(teacherName) {
+            // 관리자가 통합출석부(전체 강사) 모드일 때는 전체 강사의 원생을 한번에 보여준다.
+            if (isAdminLoggedIn && getCurrentActiveTeacher() === "통합출석부") {
+                renderManagementStudentsAll();
+                return;
+            }
+
             const listContainer = document.getElementById("management-student-list");
             listContainer.innerHTML = "";
             const data = teacherDataStore[teacherName];
             const students = data ? data.students : [];
 
+            populateManagementSchoolFilter(students);
+
             if (students.length === 0) {
                 listContainer.innerHTML = '<div class="text-xs text-zinc-400 py-6 text-center">등록된 원생이 없습니다.</div>';
                 updateSelectedCount();
+                updateManagementTotalCount(0, 0);
                 return;
             }
 
             students.forEach((s, idx) => {
-                const item = document.createElement("div");
-                item.className = "flex items-center justify-between p-2.5 rounded-xl border border-zinc-200 bg-zinc-50/50 hover:bg-white transition";
-                item.setAttribute('data-student-name', s.name);
-                const phoneDisplay = s.phone
-                    ? `<span class="text-[11px] text-zinc-500 ml-1">학생:${s.phone}</span>`
-                    : `<span class="text-[11px] text-zinc-300 ml-1">학생번호없음</span>`;
-                const parentPhoneDisplay = s.parentPhone
-                    ? `<span class="text-[11px] text-zinc-500 ml-1">학부모:${s.parentPhone}</span>`
-                    : `<span class="text-[11px] text-zinc-300 ml-1">학부모번호없음</span>`;
-                item.innerHTML = `
-                    <div class="flex items-center space-x-3 overflow-hidden">
-                        <div class="truncate">
-                            <span class="font-bold text-xs text-zinc-900">${s.name}</span>
-                            <span class="text-[11px] text-zinc-500">(${s.school})</span>
-                            <br>
-                            ${phoneDisplay}${parentPhoneDisplay}
-                        </div>
-                    </div>
-                    <div class="flex items-center space-x-2 shrink-0">
-                        <label class="flex items-center space-x-1 text-[10px] font-semibold text-zinc-600 ${!s.phone ? 'opacity-30 pointer-events-none' : ''}">
-                            <input type="checkbox" data-name="${s.name}" data-type="student" data-phone="${s.phone || ''}" onchange="updateSelectedCount()" ${!s.phone ? 'disabled' : ''} class="recipient-checkbox w-3.5 h-3.5 text-primary rounded border-zinc-300 focus:ring-primary">
-                            <span>학생</span>
-                        </label>
-                        <label class="flex items-center space-x-1 text-[10px] font-semibold text-zinc-600 ${!s.parentPhone ? 'opacity-30 pointer-events-none' : ''}">
-                            <input type="checkbox" data-name="${s.name}" data-type="parent" data-phone="${s.parentPhone || ''}" onchange="updateSelectedCount()" ${!s.parentPhone ? 'disabled' : ''} class="recipient-checkbox w-3.5 h-3.5 text-primary rounded border-zinc-300 focus:ring-primary">
-                            <span>학부모</span>
-                        </label>
-                        <button onclick="openEditStudentModal('${teacherName}', ${idx})" class="text-[11px] bg-zinc-200 hover:bg-zinc-300 text-zinc-700 px-2.5 py-1 rounded font-semibold transition">수정</button>
-                        <button onclick="deleteManagementStudent('${teacherName}', ${idx})" class="text-[11px] bg-rose-50 hover:bg-rose-100 text-rose-600 px-2 py-1 rounded font-semibold transition">삭제</button>
-                    </div>
-                `;
+                const item = buildManagementStudentItem(s, teacherName, idx, false);
                 listContainer.appendChild(item);
             });
             updateSelectedCount();
             applyManagementSearchFilter();
+        }
+
+        // 관리자 전용: 전체 강사의 원생을 하나의 목록(가나다순)으로 통합해서 보여준다.
+        function renderManagementStudentsAll() {
+            const listContainer = document.getElementById("management-student-list");
+            listContainer.innerHTML = "";
+
+            const combined = [];
+            orderedTeacherNames.forEach(tName => {
+                const data = teacherDataStore[tName];
+                if (!data || !data.students) return;
+                data.students.forEach((s, idx) => {
+                    combined.push({ student: s, teacherName: tName, idx });
+                });
+            });
+
+            combined.sort((a, b) => a.student.name.localeCompare(b.student.name, 'ko'));
+
+            populateManagementSchoolFilter(combined.map(c => c.student));
+
+            if (combined.length === 0) {
+                listContainer.innerHTML = '<div class="text-xs text-zinc-400 py-6 text-center">등록된 원생이 없습니다.</div>';
+                updateSelectedCount();
+                updateManagementTotalCount(0, 0);
+                return;
+            }
+
+            combined.forEach(({ student, teacherName, idx }) => {
+                const item = buildManagementStudentItem(student, teacherName, idx, true);
+                listContainer.appendChild(item);
+            });
+            updateSelectedCount();
+            applyManagementSearchFilter();
+        }
+
+        // 원생 관리 목록의 개별 원생 행(row)을 생성. showTeacherBadge=true면 통합보기에서 소속 강사를 함께 표시.
+        function buildManagementStudentItem(s, teacherName, idx, showTeacherBadge) {
+            const item = document.createElement("div");
+            item.className = "flex items-center justify-between p-2.5 rounded-xl border border-zinc-200 bg-zinc-50/50 hover:bg-white transition";
+            item.setAttribute('data-student-name', s.name);
+            item.setAttribute('data-student-school', s.school || '');
+            const phoneDisplay = s.phone
+                ? `<span class="text-[11px] text-zinc-500 ml-1">학생:${s.phone}</span>`
+                : `<span class="text-[11px] text-zinc-300 ml-1">학생번호없음</span>`;
+            const parentPhoneDisplay = s.parentPhone
+                ? `<span class="text-[11px] text-zinc-500 ml-1">학부모:${s.parentPhone}</span>`
+                : `<span class="text-[11px] text-zinc-300 ml-1">학부모번호없음</span>`;
+            const teacherBadge = showTeacherBadge
+                ? `<span class="text-[10px] text-primary font-semibold ml-1">[${teacherName}T]</span>`
+                : '';
+            item.innerHTML = `
+                <div class="flex items-center space-x-3 overflow-hidden">
+                    <div class="truncate">
+                        <span class="font-bold text-xs text-zinc-900">${s.name}</span>
+                        <span class="text-[11px] text-zinc-500">(${s.school})</span>
+                        ${teacherBadge}
+                        <br>
+                        ${phoneDisplay}${parentPhoneDisplay}
+                    </div>
+                </div>
+                <div class="flex items-center space-x-2 shrink-0">
+                    <label class="flex items-center space-x-1 text-[10px] font-semibold text-zinc-600 ${!s.phone ? 'opacity-30 pointer-events-none' : ''}">
+                        <input type="checkbox" data-name="${s.name}" data-type="student" data-phone="${s.phone || ''}" onchange="updateSelectedCount()" ${!s.phone ? 'disabled' : ''} class="recipient-checkbox w-3.5 h-3.5 text-primary rounded border-zinc-300 focus:ring-primary">
+                        <span>학생</span>
+                    </label>
+                    <label class="flex items-center space-x-1 text-[10px] font-semibold text-zinc-600 ${!s.parentPhone ? 'opacity-30 pointer-events-none' : ''}">
+                        <input type="checkbox" data-name="${s.name}" data-type="parent" data-phone="${s.parentPhone || ''}" onchange="updateSelectedCount()" ${!s.parentPhone ? 'disabled' : ''} class="recipient-checkbox w-3.5 h-3.5 text-primary rounded border-zinc-300 focus:ring-primary">
+                        <span>학부모</span>
+                    </label>
+                    <button onclick="openEditStudentModal('${teacherName}', ${idx})" class="text-[11px] bg-zinc-200 hover:bg-zinc-300 text-zinc-700 px-2.5 py-1 rounded font-semibold transition">수정</button>
+                    <button onclick="deleteManagementStudent('${teacherName}', ${idx})" class="text-[11px] bg-rose-50 hover:bg-rose-100 text-rose-600 px-2 py-1 rounded font-semibold transition">삭제</button>
+                </div>
+            `;
+            return item;
         }
 
         // mode: 'student' | 'parent' | 'none'
@@ -1787,7 +1884,7 @@
             } else if (tabName === 'management') {
                 mngBtn.className = "px-4 py-2 rounded-lg font-semibold bg-primary text-white transition";
                 mngSec.classList.remove("hidden");
-                renderManagementStudents(getCurrentActiveTeacher() === "통합출석부" ? "황성웅" : getCurrentActiveTeacher());
+                renderManagementStudents(getCurrentActiveTeacher());
             } else if (tabName === 'admin-reservations') {
                 adminResBtn.className = "px-4 py-2 rounded-lg font-semibold bg-primary text-white transition";
                 adminResSec.classList.remove("hidden");
