@@ -177,6 +177,9 @@
                         </div>
                         <div class="pb-1 flex items-center space-x-1.5">
                             <input type="text" id="management-search-input" oninput="handleManagementSearch(this.value)" placeholder="이름으로 검색..." class="flex-1 border border-zinc-300 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary">
+                            <select id="management-teacher-filter" onchange="handleManagementTeacherFilter(this.value)" class="hidden border border-zinc-300 rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-primary max-w-[100px]">
+                                <option value="">전체 강사</option>
+                            </select>
                             <select id="management-school-filter" onchange="handleManagementSchoolFilter(this.value)" class="border border-zinc-300 rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-primary max-w-[110px]">
                                 <option value="">전체 학교</option>
                             </select>
@@ -299,6 +302,7 @@
         var attendanceSearchQuery = "";
         var managementSearchQuery = "";
         var managementSchoolFilter = "";
+        var managementTeacherFilter = "";
         var moveModalStudentName = null;
         var moveModalTeacherName = null;
 
@@ -567,18 +571,26 @@
             applyManagementSearchFilter();
         }
 
+        function handleManagementTeacherFilter(value) {
+            managementTeacherFilter = value;
+            applyManagementSearchFilter();
+        }
+
         function applyManagementSearchFilter() {
             const q = managementSearchQuery;
             const schoolFilter = managementSchoolFilter;
+            const teacherFilter = managementTeacherFilter;
             const items = document.querySelectorAll('#management-student-list [data-student-name]');
             let visibleCount = 0;
 
             items.forEach(item => {
                 const name = item.getAttribute('data-student-name') || '';
                 const school = item.getAttribute('data-student-school') || '';
+                const teacher = item.getAttribute('data-teacher-name') || '';
                 const matchesName = !q || name.includes(q);
                 const matchesSchool = !schoolFilter || school === schoolFilter;
-                const show = matchesName && matchesSchool;
+                const matchesTeacher = !teacherFilter || teacher === teacherFilter;
+                const show = matchesName && matchesSchool && matchesTeacher;
                 item.style.display = show ? '' : 'none';
                 if (show) visibleCount++;
             });
@@ -606,6 +618,23 @@
                 select.value = prevValue;
             } else {
                 managementSchoolFilter = "";
+                select.value = "";
+            }
+        }
+
+        // 관리자의 통합 원생 목록에서만 사용하는 강사별 필터 드롭다운을 채운다 (기존 선택값 유지)
+        function populateManagementTeacherFilter() {
+            const select = document.getElementById("management-teacher-filter");
+            if (!select) return;
+            const prevValue = managementTeacherFilter;
+
+            select.innerHTML = '<option value="">전체 강사</option>' +
+                orderedTeacherNames.map(tName => `<option value="${tName}">${tName}T</option>`).join('');
+
+            if (prevValue && orderedTeacherNames.includes(prevValue)) {
+                select.value = prevValue;
+            } else {
+                managementTeacherFilter = "";
                 select.value = "";
             }
         }
@@ -745,6 +774,8 @@
                 if(document.getElementById("teacher-select")) document.getElementById("teacher-select").value = "통합출석부";
                 document.getElementById("slot-add-btn-wrapper").classList.add("hidden");
                 renderIntegratedTimetable();
+                // 원생 관리 탭이 특정 강사 보기로 고정된 채 남아있지 않도록 함께 갱신
+                renderManagementStudents(targetValue);
                 return;
             }
 
@@ -1065,6 +1096,11 @@
             const data = teacherDataStore[teacherName];
             const students = data ? data.students : [];
 
+            // 특정 강사 보기에서는 강사별 필터가 필요 없으므로 숨기고 초기화
+            const teacherFilterEl = document.getElementById("management-teacher-filter");
+            if (teacherFilterEl) teacherFilterEl.classList.add("hidden");
+            managementTeacherFilter = "";
+
             populateManagementSchoolFilter(students);
 
             if (students.length === 0) {
@@ -1098,6 +1134,11 @@
 
             combined.sort((a, b) => a.student.name.localeCompare(b.student.name, 'ko'));
 
+            // 통합 원생 보기에서만 강사별 필터를 노출
+            const teacherFilterEl = document.getElementById("management-teacher-filter");
+            if (teacherFilterEl) teacherFilterEl.classList.remove("hidden");
+            populateManagementTeacherFilter();
+
             populateManagementSchoolFilter(combined.map(c => c.student));
 
             if (combined.length === 0) {
@@ -1121,6 +1162,7 @@
             item.className = "flex items-center justify-between p-2.5 rounded-xl border border-zinc-200 bg-zinc-50/50 hover:bg-white transition";
             item.setAttribute('data-student-name', s.name);
             item.setAttribute('data-student-school', s.school || '');
+            item.setAttribute('data-teacher-name', teacherName || '');
             const phoneDisplay = s.phone
                 ? `<span class="text-[11px] text-zinc-500 ml-1">학생:${s.phone}</span>`
                 : `<span class="text-[11px] text-zinc-300 ml-1">학생번호없음</span>`;
