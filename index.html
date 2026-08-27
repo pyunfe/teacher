@@ -366,11 +366,21 @@
         ];
 
         const TEACHER_COLORS = {
-            "황성웅": "#FDE68A", "정다운": "#BFDBFE", "김신형": "#DDD6FE", "문지현": "#A7F3D0",
-            "강윤지": "#FCA5A5", "이현영": "#FDBA74", "김명일": "#A5B4FC", "김준영": "#F9A8D4",
-            "박신언": "#7DD3FC", "윤태민": "#BEF264", "고광준": "#FDA4AF", "이영찬": "#D8B4FE",
-            "오세현": "#5EEAD4"
+            "황성웅": "#980000", "정다운": "#EDE6D6", "김신형": "#D9D2E9", "문지현": "#F4CCCC",
+            "강윤지": "#EAD1DC", "이현영": "#FFF2CC", "김명일": "#CFE2F3", "김준영": "#D9EAD3",
+            "박신언": "#C9DAF8", "윤태민": "#FFE599", "고광준": "#B7E1CD", "이영찬": "#FCE5CD",
+            "오세현": "#D0E0E3"
         };
+
+        function isDarkColor(hex) {
+            if (!hex) return false;
+            const c = hex.replace('#', '');
+            const r = parseInt(c.substring(0, 2), 16);
+            const g = parseInt(c.substring(2, 4), 16);
+            const b = parseInt(c.substring(4, 6), 16);
+            const luminance = (0.299 * r + 0.587 * g + 0.114 * b);
+            return luminance < 140;
+        }
 
         // 구조: { friday: { "강사명::슬롯id": "강의실id" }, saturday: {...}, sunday: {...} }
         var classroomAssignments = { friday: {}, saturday: {}, sunday: {} };
@@ -2092,17 +2102,17 @@
             });
 
             const headerRow1 = buildingGroups.map(g =>
-                `<th colspan="${g.count}" class="border border-zinc-200 bg-zinc-100 text-zinc-700 text-xs font-bold py-1.5">${g.building} (${g.floor}층)</th>`
+                `<th colspan="${g.count}" class="border border-zinc-300 bg-zinc-100 text-zinc-700 text-xs font-bold py-1.5">${g.building} (${g.floor}층)</th>`
             ).join('');
             const headerRow2 = CLASSROOM_LIST.map(r =>
-                `<th class="border border-zinc-200 bg-zinc-50 text-zinc-700 text-[11px] font-bold py-1.5 px-1">${r.label}<br><span class="text-[10px] text-zinc-400 font-normal">정원 ${r.capacity}명</span></th>`
+                `<th class="border border-zinc-300 bg-zinc-50 text-zinc-700 text-[11px] font-bold py-1.5 px-1">${r.label}<br><span class="text-[10px] text-zinc-400 font-normal">정원 ${r.capacity}명</span></th>`
             ).join('');
 
             const ROW_HEIGHT = 46; // 한 시간(1행)의 고정 높이(px). 배정 블록의 높이 계산과 반드시 일치해야 함.
 
             let bodyRows = '';
             hours.forEach(h => {
-                let rowHtml = `<tr><td class="border border-zinc-200 bg-zinc-50 text-[11px] font-semibold text-zinc-600 text-center px-2 whitespace-nowrap" style="height:${ROW_HEIGHT}px;">${h}:00 - ${h + 1}:00</td>`;
+                let rowHtml = `<tr><td class="border border-zinc-300 bg-zinc-50 text-[11px] font-semibold text-zinc-600 text-center px-2 whitespace-nowrap" style="height:${ROW_HEIGHT}px;">${h}:00 - ${h + 1}:00</td>`;
                 CLASSROOM_LIST.forEach(r => {
                     const occ = occupancy[r.id][h];
                     if (occ && !occ.isStart) return; // rowspan으로 이미 이전 행에서 병합된 칸
@@ -2111,24 +2121,25 @@
                         const duration = occ.item.range.end - occ.item.range.start;
                         const blockHeight = ROW_HEIGHT * duration; // 병합되는 행 수만큼 정확한 픽셀 높이를 직접 지정해 여백/어긋남 방지
                         const color = TEACHER_COLORS[occ.item.teacherName] || '#d4d4d8';
+                        const dark = isDarkColor(color);
                         const overCap = occ.item.count > r.capacity;
                         const dragAttr = isAdminLoggedIn ? `draggable="true" ondragstart="handleClassroomBlockDragStart(event,'${occ.item.key}')"` : '';
-                        const removeBtn = isAdminLoggedIn ? `<button onclick="unassignClassroomSlot('${day}','${occ.item.key}')" class="text-[10px] text-rose-500 hover:underline font-semibold mt-1">빼기</button>` : '';
+                        const removeBtn = isAdminLoggedIn ? `<button onclick="unassignClassroomSlot('${day}','${occ.item.key}')" class="text-[10px] ${dark ? 'text-rose-200' : 'text-rose-500'} hover:underline font-semibold mt-1">빼기</button>` : '';
                         // "반이름 (시간대)" 형태의 제목에서 반이름만 표시용으로 분리 (시간 데이터 자체는 range에 그대로 유지되어 박스 길이 계산에 계속 사용됨)
                         const titleMatch = occ.item.slot.title.match(/^(.*?)\s*\(([^)]*)\)\s*$/);
                         const namePart = titleMatch ? titleMatch[1].trim() : occ.item.slot.title;
                         rowHtml += `
-                            <td rowspan="${duration}" class="border border-zinc-200 align-top p-0" style="height:${blockHeight}px;">
+                            <td rowspan="${duration}" class="border border-zinc-300 align-top p-0" style="height:${blockHeight}px;">
                                 <div ${dragAttr} class="w-full p-2 text-[11px] leading-tight box-border overflow-hidden ${isAdminLoggedIn ? 'cursor-grab active:cursor-grabbing' : ''}" style="background:${color}; height:${blockHeight}px; text-align:center; display:flex; flex-direction:column; align-items:center; justify-content:center;">
-                                    <div class="font-bold text-zinc-800 truncate" style="width:100%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${namePart}</div>
-                                    <div class="text-primary font-semibold">${occ.item.teacherName}T</div>
-                                    <div class="${overCap ? 'text-rose-600 font-extrabold' : 'text-zinc-500 font-semibold'}">(${occ.item.count}/${r.capacity})</div>
+                                    <div class="font-bold ${dark ? 'text-white' : 'text-zinc-800'} truncate" style="width:100%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${namePart}</div>
+                                    <div class="${dark ? 'text-white' : 'text-primary'} font-semibold">${occ.item.teacherName}T</div>
+                                    <div class="${overCap ? (dark ? 'text-rose-200 font-extrabold' : 'text-rose-600 font-extrabold') : (dark ? 'text-zinc-200 font-semibold' : 'text-zinc-500 font-semibold')}">(${occ.item.count}/${r.capacity})</div>
                                     ${removeBtn}
                                 </div>
                             </td>`;
                     } else {
                         const dropAttr = isAdminLoggedIn ? `ondragover="handleClassroomCellDragOver(event)" ondrop="handleClassroomCellDrop(event,'${day}','${r.id}')"` : '';
-                        rowHtml += `<td class="border border-zinc-200" style="height:${ROW_HEIGHT}px;" ${dropAttr}></td>`;
+                        rowHtml += `<td class="border border-zinc-300" style="height:${ROW_HEIGHT}px;" ${dropAttr}></td>`;
                     }
                 });
                 rowHtml += `</tr>`;
@@ -2146,8 +2157,8 @@
                     <table class="border-collapse text-xs" style="table-layout:fixed; width:${totalTableWidth}px;">
                         ${colgroupHtml}
                         <thead>
-                            <tr><th class="border border-zinc-200 bg-white"></th>${headerRow1}</tr>
-                            <tr><th class="border border-zinc-200 bg-white"></th>${headerRow2}</tr>
+                            <tr><th class="border border-zinc-300 bg-white"></th>${headerRow1}</tr>
+                            <tr><th class="border border-zinc-300 bg-white"></th>${headerRow2}</tr>
                         </thead>
                         <tbody>${bodyRows}</tbody>
                     </table>
@@ -2161,13 +2172,14 @@
                 } else {
                     poolContainer.innerHTML = unassigned.map(s => {
                         const color = TEACHER_COLORS[s.teacherName] || '#d4d4d8';
+                        const dark = isDarkColor(color);
                         const dragAttr = isAdminLoggedIn ? `draggable="true" ondragstart="handleClassroomBlockDragStart(event,'${s.key}')"` : '';
                         const timeLabel = s.range ? `${s.range.start}:00 - ${s.range.end}:00 (${s.range.end - s.range.start}시간)` : '시간 인식 불가';
                         return `
-                            <div ${dragAttr} class="p-2.5 rounded-xl text-xs ${isAdminLoggedIn ? 'cursor-grab active:cursor-grabbing' : ''}" style="background:${color}33; border:1px solid ${color};">
-                                <div class="font-bold text-zinc-800">${s.slot.title}</div>
-                                <div class="text-primary font-semibold text-[11px]">${s.teacherName}T</div>
-                                <div class="text-zinc-500 text-[11px]">${timeLabel} · ${s.count}명</div>
+                            <div ${dragAttr} class="p-2.5 rounded-xl text-xs ${isAdminLoggedIn ? 'cursor-grab active:cursor-grabbing' : ''}" style="background:${dark ? color : color + '33'}; border:1px solid ${color};">
+                                <div class="font-bold ${dark ? 'text-white' : 'text-zinc-800'}">${s.slot.title}</div>
+                                <div class="${dark ? 'text-white' : 'text-primary'} font-semibold text-[11px]">${s.teacherName}T</div>
+                                <div class="${dark ? 'text-zinc-200' : 'text-zinc-500'} text-[11px]">${timeLabel} · ${s.count}명</div>
                             </div>
                         `;
                     }).join('');
