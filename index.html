@@ -2082,22 +2082,25 @@
                 `<th class="border border-zinc-200 bg-zinc-50 text-zinc-700 text-[11px] font-bold py-1.5 px-1">${r.label}<br><span class="text-[10px] text-zinc-400 font-normal">정원 ${r.capacity}명</span></th>`
             ).join('');
 
+            const ROW_HEIGHT = 46; // 한 시간(1행)의 고정 높이(px). 배정 블록의 높이 계산과 반드시 일치해야 함.
+
             let bodyRows = '';
             hours.forEach(h => {
-                let rowHtml = `<tr><td class="border border-zinc-200 bg-zinc-50 text-[11px] font-semibold text-zinc-600 text-center px-2 whitespace-nowrap">${h}:00 - ${h + 1}:00</td>`;
+                let rowHtml = `<tr><td class="border border-zinc-200 bg-zinc-50 text-[11px] font-semibold text-zinc-600 text-center px-2 whitespace-nowrap" style="height:${ROW_HEIGHT}px;">${h}:00 - ${h + 1}:00</td>`;
                 CLASSROOM_LIST.forEach(r => {
                     const occ = occupancy[r.id][h];
                     if (occ && !occ.isStart) return; // rowspan으로 이미 이전 행에서 병합된 칸
 
                     if (occ && occ.isStart) {
                         const duration = occ.item.range.end - occ.item.range.start;
+                        const blockHeight = ROW_HEIGHT * duration; // 병합되는 행 수만큼 정확한 픽셀 높이를 직접 지정해 여백/어긋남 방지
                         const color = TEACHER_COLORS[occ.item.teacherName] || '#d4d4d8';
                         const overCap = occ.item.count > r.capacity;
                         const dragAttr = isAdminLoggedIn ? `draggable="true" ondragstart="handleClassroomBlockDragStart(event,'${occ.item.key}')"` : '';
                         const removeBtn = isAdminLoggedIn ? `<button onclick="unassignClassroomSlot('${day}','${occ.item.key}')" class="text-[10px] text-rose-500 hover:underline font-semibold mt-1">빼기</button>` : '';
                         rowHtml += `
-                            <td rowspan="${duration}" class="border border-zinc-200 align-top p-0">
-                                <div ${dragAttr} class="h-full w-full p-2 text-[11px] leading-tight box-border ${isAdminLoggedIn ? 'cursor-grab active:cursor-grabbing' : ''}" style="background:${color};">
+                            <td rowspan="${duration}" class="border border-zinc-200 align-top p-0" style="height:${blockHeight}px;">
+                                <div ${dragAttr} class="w-full p-2 text-[11px] leading-tight box-border overflow-hidden ${isAdminLoggedIn ? 'cursor-grab active:cursor-grabbing' : ''}" style="background:${color}; height:${blockHeight}px;">
                                     <div class="font-bold text-zinc-800 truncate">${occ.item.slot.title}</div>
                                     <div class="text-primary font-semibold">${occ.item.teacherName}T</div>
                                     <div class="${overCap ? 'text-rose-600 font-extrabold' : 'text-zinc-500 font-semibold'}">(${occ.item.count}/${r.capacity})</div>
@@ -2106,7 +2109,7 @@
                             </td>`;
                     } else {
                         const dropAttr = isAdminLoggedIn ? `ondragover="handleClassroomCellDragOver(event)" ondrop="handleClassroomCellDrop(event,'${day}','${r.id}')"` : '';
-                        rowHtml += `<td class="border border-zinc-200" style="height:46px;" ${dropAttr}></td>`;
+                        rowHtml += `<td class="border border-zinc-200" style="height:${ROW_HEIGHT}px;" ${dropAttr}></td>`;
                     }
                 });
                 rowHtml += `</tr>`;
