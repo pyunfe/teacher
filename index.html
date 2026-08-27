@@ -2096,8 +2096,8 @@
                         const dragAttr = isAdminLoggedIn ? `draggable="true" ondragstart="handleClassroomBlockDragStart(event,'${occ.item.key}')"` : '';
                         const removeBtn = isAdminLoggedIn ? `<button onclick="unassignClassroomSlot('${day}','${occ.item.key}')" class="text-[10px] text-rose-500 hover:underline font-semibold mt-1">빼기</button>` : '';
                         rowHtml += `
-                            <td rowspan="${duration}" class="border border-zinc-200 align-top p-1">
-                                <div ${dragAttr} class="h-full w-full rounded-lg p-2 text-[11px] leading-tight ${isAdminLoggedIn ? 'cursor-grab active:cursor-grabbing' : ''}" style="background:${color}33; border:1px solid ${color};">
+                            <td rowspan="${duration}" class="border border-zinc-200 align-top p-0">
+                                <div ${dragAttr} class="h-full w-full p-2 text-[11px] leading-tight box-border ${isAdminLoggedIn ? 'cursor-grab active:cursor-grabbing' : ''}" style="background:${color};">
                                     <div class="font-bold text-zinc-800 truncate">${occ.item.slot.title}</div>
                                     <div class="text-primary font-semibold">${occ.item.teacherName}T</div>
                                     <div class="${overCap ? 'text-rose-600 font-extrabold' : 'text-zinc-500 font-semibold'}">(${occ.item.count}/${r.capacity})</div>
