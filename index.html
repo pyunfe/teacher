@@ -34,10 +34,10 @@
 
     <div id="login-screen" class="flex items-center justify-center min-h-screen bg-[#F7F7F5]">
         <div class="bg-white p-8 rounded-2xl shadow-sm border border-zinc-200 w-96 text-center">
-            <h1 class="text-2xl font-bold text-primary mb-2 tracking-tight">국성티처</h1>
-            <p class="text-zinc-500 mb-6 text-sm">중·고등부 학원 관리 시스템 로그인</p>
+            <h1 class="text-2xl font-bold text-primary mb-2 tracking-tight">국성학원</h1>
+            <p class="text-zinc-500 mb-6 text-sm">중·고등부 학생 관리 시스템 로그인</p>
             <div class="space-y-4">
-                <input type="password" id="login-input" placeholder="비밀번호를 입력해주세요" maxlength="20" 
+                <input type="password" id="login-input" placeholder="비밀번호를 입력해주세요" maxlength="20"
                     onkeydown="if(event.key === 'Enter') handleLogin()"
                     class="w-full px-4 py-3 border border-zinc-300 rounded-xl text-center text-lg tracking-widest focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary">
                 <button onclick="handleLogin()" class="w-full bg-primary text-white py-3 rounded-xl font-semibold hover:bg-primary-hover transition">
@@ -50,13 +50,13 @@
     <div id="app-screen" class="hidden min-h-screen flex flex-col">
         <header class="bg-white border-b border-zinc-200 px-6 py-4 flex justify-between items-center sticky top-0 z-40">
             <div class="flex items-center space-x-4">
-                <h1 class="text-xl font-bold text-primary tracking-tighter">국성티처</h1>
+                <h1 class="text-xl font-bold text-primary tracking-tighter">국성학원</h1>
                 <span id="user-badge" class="px-3 py-1 bg-[#802020]/10 text-primary rounded-full text-sm font-medium">강사 모드</span>
-                
+
                 <div id="admin-selector-wrapper" class="hidden flex items-center space-x-2">
                     <label class="text-sm text-zinc-600">보기 모드:</label>
                     <select id="teacher-select" onchange="changeTeacher(this.value)" class="border border-zinc-300 rounded-lg px-3 py-1 text-sm bg-zinc-50 focus:outline-none focus:ring-1 focus:ring-primary">
-                        <option value="통합출석부">🌟 전체 통합 출석부 (관리자 전용)</option>
+                        <option value="통합출석부">🔗 전체 통합 출석부 (관리자 전용)</option>
                         <option value="황성웅">황성웅T</option>
                         <optgroup label="중등부">
                             <option value="정다운">정다운T</option>
@@ -83,14 +83,14 @@
                     <button onclick="switchTab('attendance')" id="tab-attendance-btn" class="px-4 py-2 rounded-lg font-semibold bg-primary text-white transition">출석부</button>
                     <button onclick="switchTab('classroom')" id="tab-classroom-btn" class="px-4 py-2 rounded-lg font-semibold text-zinc-600 hover:bg-zinc-100 transition">강의실 배정표</button>
                     <button onclick="switchTab('management')" id="tab-management-btn" class="px-4 py-2 rounded-lg font-semibold text-zinc-600 hover:bg-zinc-100 transition">원생 관리</button>
-                    <button onclick="switchTab('admin-reservations')" id="tab-admin-reservations-btn" class="px-4 py-2 rounded-lg font-semibold text-zinc-600 hover:bg-zinc-100 transition">전송 예약 관리</button>
+                    <button onclick="switchTab('admin-reservations')" id="tab-admin-reservations-btn" class="px-4 py-2 rounded-lg font-semibold text-zinc-600 hover:bg-zinc-100 transition">발송 예약 관리</button>
                 </nav>
                 <button onclick="handleLogout()" class="text-sm text-red-500 hover:underline">로그아웃</button>
             </div>
         </header>
 
         <main class="flex-1 p-6 max-w-7xl mx-auto w-full">
-            
+
             <section id="tab-attendance" class="space-y-6">
                 <div class="flex justify-between items-center bg-white p-4 rounded-2xl shadow-sm border border-zinc-200">
                     <div>
@@ -115,7 +115,7 @@
                 </div>
 
                 <div class="space-y-8" id="timetable-container">
-                    
+
                     <div class="bg-white p-5 rounded-2xl shadow-sm border border-zinc-200">
                         <div class="flex justify-between items-center mb-4 pb-2 border-b border-zinc-100">
                             <h3 class="text-primary font-extrabold text-lg" id="label-friday">금요일</h3>
@@ -146,13 +146,13 @@
             <section id="tab-management" class="hidden space-y-6">
                 <div class="flex justify-between items-center">
                     <div>
-                        <h2 class="text-xl font-bold text-[#1c1b1b]" id="management-title">원생 관리 및 카카오톡 전송 예약</h2>
-                        <p class="text-sm text-zinc-500">원생을 선택하고 전송할 내용을 작성한 뒤 예약 설정을 진행하세요.</p>
+                        <h2 class="text-xl font-bold text-[#1c1b1b]" id="management-title">원생 관리 및 카카오톡 발송 예약</h2>
+                        <p class="text-sm text-zinc-500">대상자를 선택하고 발송할 내용을 작성한 뒤 예약 설정을 진행하세요.</p>
                     </div>
                     <div class="space-x-2 flex items-center">
                         <input type="file" id="excel-file-input" accept=".xlsx, .xls, .csv" style="display: none;" onchange="handleExcelUpload(event)">
                         <button onclick="document.getElementById('excel-file-input').click()" class="bg-emerald-700 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-emerald-800 transition">
-                            📁 통통통 엑셀 일괄 등록
+                            📊 통통통 원생 일괄 등록
                         </button>
                         <input type="file" id="phone-excel-file-input" accept=".xlsx, .xls, .csv" style="display: none;" onchange="handlePhoneExcelUpload(event)">
                         <button onclick="document.getElementById('phone-excel-file-input').click()" class="bg-sky-700 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-sky-800 transition">
@@ -193,11 +193,11 @@
                     </div>
 
                     <div class="md:col-span-7 bg-white p-6 rounded-2xl shadow-sm border border-zinc-200 space-y-5">
-                        <h3 class="font-bold text-base text-zinc-800 border-b border-zinc-100 pb-2">카카오톡 전송 내용 작성</h3>
+                        <h3 class="font-bold text-base text-zinc-800 border-b border-zinc-100 pb-2">카카오톡 발송 내용 작성</h3>
                         <div class="space-y-1">
                             <label class="text-xs font-semibold text-zinc-600">발송 메시지 내용</label>
-                            <textarea id="kakao-msg-content" rows="7" 
-                                class="w-full border border-zinc-200 rounded-xl p-3 focus:outline-none focus:ring-1 focus:ring-primary text-sm resize-none" 
+                            <textarea id="kakao-msg-content" rows="7"
+                                class="w-full border border-zinc-200 rounded-xl p-3 focus:outline-none focus:ring-1 focus:ring-primary text-sm resize-none"
                                 placeholder="학부모님/학생에게 전달할 알림톡 내용을 입력하세요..."></textarea>
                         </div>
                         <div class="space-y-1">
@@ -208,7 +208,7 @@
                             </div>
                         </div>
                         <button onclick="handleKakaoReservation()" class="w-full bg-primary text-white py-3 rounded-xl font-semibold hover:bg-primary-hover transition shadow-sm">
-                            전송 예약하기
+                            발송 예약하기
                         </button>
                     </div>
                 </div>
@@ -233,7 +233,7 @@
                     </div>
                     <div id="classroom-pool-panel" class="lg:col-span-3 bg-white p-4 rounded-2xl shadow-sm border border-zinc-200 space-y-3">
                         <div class="flex justify-between items-center">
-                            <h3 class="font-bold text-sm text-zinc-800">미배정 반 목록</h3>
+                            <h3 class="font-bold text-sm text-zinc-800">미배정 대반 목록</h3>
                             <span class="text-xs text-zinc-400" id="classroom-pool-count"></span>
                         </div>
                         <div id="classroom-pool-list" class="space-y-2 max-h-[720px] overflow-y-auto pr-1" ondragover="handleClassroomPoolDragOver(event)" ondrop="handleClassroomPoolDrop(event)"></div>
@@ -243,8 +243,8 @@
 
             <section id="tab-admin-reservations" class="hidden space-y-6">
                 <div>
-                    <h2 class="text-xl font-bold text-zinc-800" id="admin-res-page-title">카카오톡 전송 예약 관리</h2>
-                    <p class="text-sm text-zinc-500" id="admin-res-page-desc">신청한 예약 내역을 확인하고 자동화 프로그램 연동 상태를 관리합니다.</p>
+                    <h2 class="text-xl font-bold text-zinc-800" id="admin-res-page-title">카카오톡 발송 예약 관리</h2>
+                    <p class="text-sm text-zinc-500" id="admin-res-page-desc">신청한 예약 내역을 확인하고 발송 대행 프로그램 연동 상태를 관리합니다.</p>
                 </div>
                 <div class="bg-white p-6 rounded-2xl shadow-sm border border-zinc-200">
                     <div id="admin-reservation-list" class="space-y-4"></div>
@@ -264,11 +264,11 @@
             <div class="px-4 pt-3 space-y-1.5 bg-zinc-50 mx-4 rounded-xl p-3 border border-zinc-200">
                 <label class="flex items-start space-x-2 cursor-pointer">
                     <input type="radio" name="move-scope" value="week" id="move-scope-week" checked class="mt-0.5 w-4 h-4 text-primary focus:ring-primary">
-                    <span class="text-xs text-zinc-700"><b>이번 주차(<span id="move-modal-week-label" class="text-primary font-semibold"></span>)만 임시 이동</b><br><span class="text-[11px] text-zinc-500">다음 주차부터는 자동으로 기본 시간표대로 돌아갑니다.</span></span>
+                    <span class="text-xs text-zinc-700"><b>이번 주차(<span id="move-modal-week-label" class="text-primary font-semibold"></span>)만 임시 이동</b><br><span class="text-[11px] text-zinc-500">다음 주차부터는 자동으로 기본 시간표로 돌아갑니다.</span></span>
                 </label>
                 <label class="flex items-start space-x-2 cursor-pointer">
                     <input type="radio" name="move-scope" value="default" id="move-scope-default" class="mt-0.5 w-4 h-4 text-primary focus:ring-primary">
-                    <span class="text-xs text-zinc-700"><b>기본 시간표 자체를 변경</b><br><span class="text-[11px] text-zinc-500">앞으로 매 주차 이 시간표로 계속 생성됩니다.</span></span>
+                    <span class="text-xs text-zinc-700"><b>기본 시간표 자체를 변경</b><br><span class="text-[11px] text-zinc-500">앞으로 매 주차 이 시간표로 계속 유지됩니다.</span></span>
                 </label>
                 <button id="move-modal-clear-override-btn" onclick="clearMoveModalOverride()" class="hidden text-[11px] text-rose-600 hover:underline font-semibold pt-1">이번 주 임시 설정 초기화 (기본 시간표로 복원)</button>
             </div>
@@ -293,8 +293,8 @@
                         <input type="text" id="student-modal-name" placeholder="예: 홍길동" class="w-full border border-zinc-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
                     </div>
                     <div class="space-y-1">
-                        <label class="text-xs font-semibold text-zinc-600">학교/소속</label>
-                        <input type="text" id="student-modal-school" placeholder="예: 청람중1" class="w-full border border-zinc-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
+                        <label class="text-xs font-semibold text-zinc-600">학교/학년</label>
+                        <input type="text" id="student-modal-school" placeholder="예: 청담중1" class="w-full border border-zinc-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
                     </div>
                     <div class="space-y-1">
                         <label class="text-xs font-semibold text-zinc-600">학생 전화번호</label>
@@ -315,8 +315,11 @@
                 </div>
                 <div id="student-modal-withdraw-section" class="hidden pt-3 border-t border-zinc-100 space-y-2">
                     <div id="student-modal-withdraw-info" class="hidden text-xs text-rose-600 font-semibold"></div>
-                    <button type="button" id="student-modal-withdraw-btn" onclick="handleWithdrawFromModal()" class="text-xs bg-rose-50 hover:bg-rose-100 text-rose-600 px-3 py-1.5 rounded-lg font-semibold transition">퇴원 처리</button>
-                    <button type="button" id="student-modal-restore-btn" onclick="handleRestoreFromModal()" class="hidden text-xs bg-emerald-50 hover:bg-emerald-100 text-emerald-700 px-3 py-1.5 rounded-lg font-semibold transition">재원 처리 (복원)</button>
+                    <div class="flex items-center space-x-2">
+                        <button type="button" id="student-modal-withdraw-btn" onclick="handleWithdrawFromModal()" class="text-xs bg-rose-50 hover:bg-rose-100 text-rose-600 px-3 py-1.5 rounded-lg font-semibold transition">퇴원 처리</button>
+                        <button type="button" id="student-modal-restore-btn" onclick="handleRestoreFromModal()" class="hidden text-xs bg-emerald-50 hover:bg-emerald-100 text-emerald-700 px-3 py-1.5 rounded-lg font-semibold transition">재원 처리 (복원)</button>
+                        <button type="button" id="student-modal-delete-btn" onclick="handleDeleteFromModal()" class="text-xs bg-zinc-100 hover:bg-rose-100 hover:text-rose-700 text-zinc-500 px-3 py-1.5 rounded-lg font-semibold transition">완전 삭제</button>
+                    </div>
                 </div>
             </div>
             <div class="flex justify-end space-x-2 p-4 border-t border-zinc-100">
@@ -327,9 +330,9 @@
     </div>
 
     <script>
-        var SUPABASE_URL = 'https://haaiwbjdlqwrfrvsurxi.supabase.co'; 
-        var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhhYWl3YmpkbHF3cmZydnN1cnhpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY1MTQ1NjQsImV4cCI6MjEwMjA5MDU2NH0.hiMuLbrgkF2W_-PR5dfwmqI2TAOLi3yJv25_iCMovFE'; 
-        
+        var SUPABASE_URL = 'https://haaiwbjdlqwrfrvsurxi.supabase.co';
+        var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhhYWl3YmpkbHF3cmZydnN1cnhpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY1MTQ1NjQsImV4cCI6MjEwMjA5MDU2NH0.hiMuLbrgkF2W_-PR5dfwmqI2TAOLi3yJv25_iCMovFE';
+
         var supabaseClient = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
 
         var isAdminLoggedIn = false;
@@ -444,20 +447,20 @@
             const weekSelect = document.getElementById("week-select");
             if (!weekSelect) return;
             weekSelect.innerHTML = "";
-            
+
             const today = new Date();
             today.setHours(0, 0, 0, 0);
 
-            const dayOfWeek = today.getDay(); 
-            // 금/토/일이 한 "주차"를 이룸: 일요일(0)은 어제(토요일)가 속한 주차를 가리켜야 하고,
-            // 월~목은 다가오는 주말 주차를, 금/토는 이번 주말 주차를 가리켜야 함.
+            const dayOfWeek = today.getDay();
+            // 금/토/일이 한 "주차"를 이룸: 일요일(0)의 이전(토요일)이 속한 주차를 가리켜야 하고,
+            // 월~목은 다가오는 주말 주차를, 금/토 는 이번 주말 주차를 가리켜야 함.
             let diffToSaturday = (dayOfWeek === 0) ? -1 : 6 - dayOfWeek;
-            
+
             const currentSaturday = new Date(today);
             currentSaturday.setDate(today.getDate() + diffToSaturday);
             currentSaturday.setHours(0, 0, 0, 0);
 
-            const baseStartDate = new Date("2026-08-22"); 
+            const baseStartDate = new Date("2026-08-22");
             baseStartDate.setHours(0, 0, 0, 0);
 
             let diffTime = currentSaturday.getTime() - baseStartDate.getTime();
@@ -469,11 +472,11 @@
             for (let i = 0; i <= diffWeeks; i++) {
                 let satDateObj = new Date(baseStartDate);
                 satDateObj.setDate(baseStartDate.getDate() + (i * 7));
-                
+
                 let saturdayDate = getFormattedDate(satDateObj);
                 let fridayDate = getFormattedDate(new Date(satDateObj.getTime() - 86400000));
                 let sundayDate = getFormattedDate(new Date(satDateObj.getTime() + 86400000));
-                
+
                 let weekKey = `${saturdayDate} 주차`;
                 let option = document.createElement("option");
                 option.value = weekKey;
@@ -481,7 +484,7 @@
                 option.setAttribute('data-sat', saturdayDate);
                 option.setAttribute('data-sun', sundayDate);
                 option.innerText = `${weekKey} (토:${saturdayDate.slice(5)})`;
-                
+
                 weekSelect.appendChild(option);
 
                 if (i === diffWeeks) {
@@ -516,8 +519,8 @@
                 document.getElementById("user-badge").innerText = "관리자 모드 (전체 권한)";
                 document.getElementById("admin-selector-wrapper").classList.remove("hidden");
                 adminResBtn.classList.remove("hidden");
-                document.getElementById("admin-res-page-title").innerText = "강사별 카카오톡 전송 예약 관리";
-                document.getElementById("admin-res-page-desc").innerText = "강사들이 신청한 예약 내역을 확인하고 자동화 프로그램 연동 상태를 관리합니다.";
+                document.getElementById("admin-res-page-title").innerText = "강사별 카카오톡 발송 예약 관리";
+                document.getElementById("admin-res-page-desc").innerText = "강사들이 신청한 예약 내역을 확인하고 발송 대행 프로그램 연동 상태를 관리합니다.";
                 changeTeacher("통합출석부");
             } else if (teacherMap[inputVal]) {
                 isAdminLoggedIn = false;
@@ -525,8 +528,8 @@
                 document.getElementById("user-badge").innerText = `강사 모드 (${tName}T)`;
                 document.getElementById("admin-selector-wrapper").classList.add("hidden");
                 adminResBtn.classList.remove("hidden");
-                document.getElementById("admin-res-page-title").innerText = "카카오톡 전송 예약 내역";
-                document.getElementById("admin-res-page-desc").innerText = "본인이 신청한 카카오톡 전송 예약 내역을 확인합니다.";
+                document.getElementById("admin-res-page-title").innerText = "카카오톡 발송 예약 내역";
+                document.getElementById("admin-res-page-desc").innerText = "본인이 신청한 카카오톡 발송 예약 내역을 확인합니다.";
                 changeTeacher(tName);
             } else {
                 alert("등록되지 않은 비밀번호입니다.");
@@ -575,7 +578,7 @@
             const selectElem = document.getElementById("week-select");
             if (!selectElem || selectElem.selectedIndex === -1) return;
             const selectedOpt = selectElem.options[selectElem.selectedIndex];
-            
+
             const fri = selectedOpt.getAttribute('data-fri');
             const sat = selectedOpt.getAttribute('data-sat');
             const sun = selectedOpt.getAttribute('data-sun');
@@ -849,7 +852,7 @@
 
         function clearMoveModalOverride() {
             if (!moveModalStudentName || !moveModalTeacherName) return;
-            if (!confirm("이번 주차의 임시 시간표 설정을 지우고 기본 시간표로 되돌리시겠습니까?")) return;
+            if (!confirm("이번 주차의 임시 시간표 설정을 지우고 기본 시간표로 돌리시겠습니까?")) return;
 
             clearWeeklyOverride(moveModalTeacherName, moveModalStudentName, currentSelectedWeek);
 
@@ -875,7 +878,7 @@
 
             document.getElementById("attendance-title").innerText = `${targetValue}T 출석부`;
             document.getElementById("slot-add-btn-wrapper").classList.remove("hidden");
-            
+
             if(document.getElementById("teacher-select")) {
                 document.getElementById("teacher-select").value = targetValue;
             }
@@ -910,7 +913,7 @@
             return hour;
         }
 
-        // 시간대 박스 제목(예: "청람중1 (오후 2시 - 오후 5시)")에서 시작~종료 시각을 24시간제로 추출
+        // 시간대 박스 제목(예: "청담중1 (오후 2시 - 오후 5시)")에서 시작~종료 시각을 24시간제로 추출
         function parseSlotTimeRange(title) {
             if (!title) return null;
             const regex = /(오전|오후)\s*(\d{1,2})\s*시/g;
@@ -928,7 +931,7 @@
         }
 
         // 한줄메모(예: "8/23(일) 오후 2시 신규")에서 금/토/일 요일을 추출
-        // 1) "금요일/토요일/일요일" 정식 표기 → 2) 괄호 안 요일 한 글자 "(금)(토)(일)" → 3) 날짜(M/D)로 요일 계산 순으로 시도
+        // 1) "금요일/토요일/일요일" 직접 표기하기 → 2) 괄호 안 요일 한 글자 "(금)(토)(일)" → 3) 날짜(M/D)로 요일 계산 순으로 시도
         function parseNoteDayKey(text) {
             if (!text) return null;
 
@@ -1022,7 +1025,7 @@
             }
             const key = getRecordKey(studentName, slotId);
             if (!attendanceRecords[currentSelectedWeek][key]) {
-                // 시간표별 개별 기록 도입 전 데이터(학생 이름만으로 저장된 기록)가 있으면 초기값으로 승계
+                // 시간표별 개별 기록 대신 옛 데이터(학생 이름만으로 저장된 기록)가 있으면 초기값으로 쓰고
                 const legacy = attendanceRecords[currentSelectedWeek][studentName];
                 attendanceRecords[currentSelectedWeek][key] = legacy
                     ? { status: legacy.status, memo: legacy.memo }
@@ -1049,7 +1052,7 @@
                 const rowContainer = document.getElementById(`row-${day}`);
                 rowContainer.innerHTML = "";
 
-                // 해당 요일에 수업이 있는 강사만 컬럼으로 구성
+                // 해당 요일에 시간대가 있는 강사만 컬럼으로 구성
                 const teacherColumns = [];
                 orderedTeacherNames.forEach(tName => {
                     if (!teacherDataStore[tName]) initDefaultTeacherData(tName);
@@ -1061,11 +1064,11 @@
                 });
 
                 if (teacherColumns.length === 0) {
-                    rowContainer.innerHTML = '<div class="text-xs text-zinc-400 py-4 text-center w-full">등록된 수업이 없습니다.</div>';
+                    rowContainer.innerHTML = '<div class="text-xs text-zinc-400 py-4 text-center w-full">등록된 시간대가 없습니다.</div>';
                     return;
                 }
 
-                // CSS Grid로 배치: 같은 줄(grid-row)에 놓인 카드들은 그 줄에서 가장 큰 카드 높이에 자동으로 맞춰짐(stretch)
+                // CSS Grid로 배치: 같은 줄(grid-row)에 놓인 카드들이 그 중에서 가장 큰 카드 높이에 자동으로 맞춰짐(stretch)
                 let cardsHtml = "";
                 teacherColumns.forEach((col, colIdx) => {
                     const { tName, daySlots, tData } = col;
@@ -1095,7 +1098,7 @@
                                         <button onclick="handleStatusClick('${s.name}', '${slot.id}', '결석', this)" class="px-2 py-0.5 text-[11px] rounded ${absBtnClass} status-btn">결석</button>
                                     </div>
                                     <div class="flex-1 min-w-0">
-                                        <input type="text" placeholder="비고" value="${rec.memo}" 
+                                        <input type="text" placeholder="비고" value="${rec.memo}"
                                             oninput="updateStudentMemo('${s.name}', '${slot.id}', this.value)"
                                             class="w-full text-[11px] border border-zinc-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary text-zinc-700 bg-white">
                                     </div>
@@ -1143,7 +1146,7 @@
                 const daySlots = getSortedSlots(data.slots[day] || []);
 
                 if (daySlots.length === 0) {
-                    rowContainer.innerHTML = '<div class="text-xs text-zinc-400 py-4 text-center w-full">등록된 수업이 없습니다.</div>';
+                    rowContainer.innerHTML = '<div class="text-xs text-zinc-400 py-4 text-center w-full">등록된 시간대가 없습니다.</div>';
                     return;
                 }
 
@@ -1156,7 +1159,7 @@
                         const rec = getStudentRecord(s.name, slot.id);
                         const isAtt = rec.status === '출석';
                         const isTemp = hasWeeklyOverride(teacherName, s.name, currentSelectedWeek);
-                        
+
                         const attBtnClass = isAtt ? "bg-[#dcfce7] text-[#15803d] font-bold" : "bg-zinc-100 text-zinc-500 font-semibold";
                         const absBtnClass = !isAtt ? "bg-[#fee2e2] text-[#b91c1c] font-bold" : "bg-zinc-100 text-zinc-500 font-semibold";
                         const tempBadge = isTemp ? '<span class="text-[9px] bg-amber-100 text-amber-700 px-1 rounded ml-1 align-middle">임시</span>' : '';
@@ -1173,7 +1176,7 @@
                                     <button onclick="handleStatusClick('${s.name}', '${slot.id}', '결석', this)" class="px-2 py-0.5 text-[11px] rounded ${absBtnClass} status-btn">결석</button>
                                 </div>
                                 <div class="flex-1 min-w-0">
-                                    <input type="text" placeholder="비고" value="${rec.memo}" 
+                                    <input type="text" placeholder="비고" value="${rec.memo}"
                                         oninput="updateStudentMemo('${s.name}', '${slot.id}', this.value)"
                                         class="w-full text-[11px] border border-zinc-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary text-zinc-700 bg-white">
                                 </div>
@@ -1215,7 +1218,7 @@
         }
 
         function renderManagementStudents(teacherName) {
-            // 관리자가 통합출석부(전체 강사) 모드일 때는 전체 강사의 원생을 한번에 보여준다.
+            // 관리자가 통합출석부(전체 강사) 모드일 때는 전체 강사의 학생을 한번에 보여준다.
             if (isAdminLoggedIn && getCurrentActiveTeacher() === "통합출석부") {
                 renderManagementStudentsAll();
                 return;
@@ -1235,7 +1238,7 @@
             populateManagementSchoolFilter(students);
 
             if (students.length === 0) {
-                listContainer.innerHTML = `<div class="text-xs text-zinc-400 py-6 text-center">${managementStatusFilter === 'withdrawn' ? '퇴원 처리된 원생이 없습니다.' : '등록된 원생이 없습니다.'}</div>`;
+                listContainer.innerHTML = `<div class="text-xs text-zinc-400 py-6 text-center">${managementStatusFilter === 'withdrawn' ? '퇴원 처리된 학생이 없습니다.' : '등록된 학생이 없습니다.'}</div>`;
                 updateSelectedCount();
                 updateManagementTotalCount(0, 0);
                 return;
@@ -1250,7 +1253,7 @@
             applyManagementSearchFilter();
         }
 
-        // 관리자 전용: 전체 강사의 원생을 하나의 목록(가나다순)으로 통합해서 보여준다.
+        // 관리자 전용: 전체 강사의 학생을 하나의 목록(가나다순)으로 통합해서 보여준다.
         function renderManagementStudentsAll() {
             const listContainer = document.getElementById("management-student-list");
             listContainer.innerHTML = "";
@@ -1275,7 +1278,7 @@
             populateManagementSchoolFilter(combined.map(c => c.student));
 
             if (combined.length === 0) {
-                listContainer.innerHTML = `<div class="text-xs text-zinc-400 py-6 text-center">${managementStatusFilter === 'withdrawn' ? '퇴원 처리된 원생이 없습니다.' : '등록된 원생이 없습니다.'}</div>`;
+                listContainer.innerHTML = `<div class="text-xs text-zinc-400 py-6 text-center">${managementStatusFilter === 'withdrawn' ? '퇴원 처리된 학생이 없습니다.' : '등록된 학생이 없습니다.'}</div>`;
                 updateSelectedCount();
                 updateManagementTotalCount(0, 0);
                 return;
@@ -1314,7 +1317,7 @@
             renderManagementStudents(getCurrentActiveTeacher());
         }
 
-        // 원생 관리 목록의 개별 원생 행(row)을 생성. showTeacherBadge=true면 통합보기에서 소속 강사를 함께 표시.
+        // 원생 관리 목록의 개별 학생 행(row)을 생성. showTeacherBadge=true면 통합보기에서 담당 강사를 함께 표시.
         function buildManagementStudentItem(s, teacherName, idx, showTeacherBadge) {
             const item = document.createElement("div");
             item.className = "flex items-center justify-between p-2.5 rounded-xl border border-zinc-200 bg-zinc-50/50 hover:bg-white transition";
@@ -1358,13 +1361,14 @@
                         <span>학부모</span>
                     </label>
                     <button onclick="openEditStudentModal('${teacherName}', ${idx})" class="text-[11px] bg-zinc-200 hover:bg-zinc-300 text-zinc-700 px-2.5 py-1 rounded font-semibold transition">수정</button>
+                    <button onclick="handleDeleteStudent('${teacherName}', ${idx})" class="text-[11px] bg-rose-50 hover:bg-rose-100 text-rose-600 px-2.5 py-1 rounded font-semibold transition">삭제</button>
                 </div>
             `;
             return item;
         }
 
         // mode: 'student' | 'parent' | 'none'
-        // 검색 필터로 숨겨진(표시되지 않는) 원생은 대상에서 제외한다.
+        // 검색 필터로 숨겨진(표시되지 않는) 학생은 대상에서 제외한다.
         // '학생'과 '학부모' 버튼은 서로 독립적으로 동작 -> 둘 다 누르면 둘 다 선택된 상태가 된다.
         function selectAllRecipients(mode) {
             const visibleRows = Array.from(document.querySelectorAll('#management-student-list [data-student-name]'))
@@ -1418,7 +1422,7 @@
         function openAddStudentModal() {
             const currentTeacher = getCurrentActiveTeacher();
             if (currentTeacher === "통합출석부") {
-                alert("통합출석부 모드에서는 원생을 등록할 수 없습니다.");
+                alert("통합출석부 모드에서는 학생을 등록할 수 없습니다.");
                 return;
             }
             const data = teacherDataStore[currentTeacher];
@@ -1446,7 +1450,7 @@
             if (mode === 'edit' && !student) return;
 
             document.getElementById("student-modal-title").innerText = mode === 'edit'
-                ? `원생 정보 수정 - ${student.name} (${teacherName}T)`
+                ? `학생 정보 수정 - ${student.name} (${teacherName}T)`
                 : `원생 신규 등록 (${teacherName}T)`;
 
             document.getElementById("student-modal-name").value = student ? student.name : "";
@@ -1501,10 +1505,10 @@
             });
 
             if (!hasAnySlot) {
-                listContainer.innerHTML = '<div class="text-xs text-zinc-400 text-center py-6">먼저 출석부 탭에서 시간대 박스를 하나 이상 생성해주세요.</div>';
+                listContainer.innerHTML = '<div class="text-xs text-zinc-400 text-center py-6">먼저 출석부 탭에서 시간대 박스를 생성해주세요.</div>';
             }
 
-            // 퇴원 처리 영역: 수정 모드에서만 노출. 재원/퇴원 상태에 따라 버튼을 다르게 보여줌.
+            // 퇴원/삭제 처리 영역: 수정 모드에서만 노출. 재원/퇴원 상태에 따라 버튼을 다르게 보여줌.
             const withdrawSection = document.getElementById("student-modal-withdraw-section");
             const withdrawInfo = document.getElementById("student-modal-withdraw-info");
             const withdrawBtn = document.getElementById("student-modal-withdraw-btn");
@@ -1596,7 +1600,19 @@
             return all;
         }
 
-        // 이름(+학교, 동명이인 구분용)으로 이미 등록된 원생을 전체 강사에서 검색
+        function normalizeForCompare(str) {
+            return String(str || "").replace(/\s+/g, "");
+        }
+
+        function normalizePhone(str) {
+            return String(str || "").replace(/[^0-9]/g, "");
+        }
+
+        function escapeRegexForName(str) {
+            return String(str || "").replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
+
+        // 이름(+학교, 동명이인 구분용)으로 이미 등록된 학생을 전체 강사에서 검색
         function findExistingStudentGlobally(name, school) {
             const candidates = [];
             orderedTeacherNames.forEach(tName => {
@@ -1616,6 +1632,61 @@
                 if (filtered.length === 1) return { status: 'unique', match: filtered[0] };
             }
             return { status: 'ambiguous', candidates };
+        }
+
+        // 통통통 일괄 등록 엑셀의 한 행(이름/학교+학년/연락처)이
+        //  - 학교/학년이 다르면: 완전히 다른 사람 -> 이름 그대로 신규 등록
+        //  - 학교/학년이 같고 번호가 일치(또는 대조할 번호가 아예 없음): 이미 등록된 같은 사람 -> 연락처만 보완
+        //  - 학교/학년이 같은데 번호가 서로 다름: 진짜 동명이인 -> 이름 뒤에 B, C... 접미사를 붙여 신규 등록
+        // 인지 판별한다.
+        function resolveNewRegistrant(name, schoolForRecord, studentPhone, parentPhone) {
+            const nameRegex = new RegExp('^' + escapeRegexForName(name) + '([A-Z])$');
+            const allCandidates = [];
+            orderedTeacherNames.forEach(tName => {
+                const tData = teacherDataStore[tName];
+                if (!tData || !tData.students) return;
+                tData.students.forEach(s => {
+                    if (s.name === name) {
+                        allCandidates.push({ teacherName: tName, student: s, suffix: '' });
+                    } else {
+                        const m = s.name.match(nameRegex);
+                        if (m) allCandidates.push({ teacherName: tName, student: s, suffix: m[1] });
+                    }
+                });
+            });
+
+            if (allCandidates.length === 0) return { action: 'new', finalName: name };
+
+            const sameSchool = allCandidates.filter(c => normalizeForCompare(c.student.school) === normalizeForCompare(schoolForRecord));
+            if (sameSchool.length === 0) return { action: 'new', finalName: name };
+
+            const inStudentPhone = normalizePhone(studentPhone);
+            const inParentPhone = normalizePhone(parentPhone);
+
+            const phoneMatch = sameSchool.find(c => {
+                const s = c.student;
+                return (inStudentPhone && s.phone && inStudentPhone === normalizePhone(s.phone)) ||
+                       (inParentPhone && s.parentPhone && inParentPhone === normalizePhone(s.parentPhone));
+            });
+            if (phoneMatch) return { action: 'update', match: phoneMatch };
+
+            const hasPhoneConflict = sameSchool.some(c => {
+                const s = c.student;
+                return (inStudentPhone && s.phone && inStudentPhone !== normalizePhone(s.phone)) ||
+                       (inParentPhone && s.parentPhone && inParentPhone !== normalizePhone(s.parentPhone));
+            });
+            if (hasPhoneConflict) {
+                let letter = 'B';
+                for (let code = 66; code <= 90; code++) {
+                    const cand = String.fromCharCode(code);
+                    if (!allCandidates.some(c => c.suffix === cand)) { letter = cand; break; }
+                }
+                return { action: 'new', finalName: name + letter };
+            }
+
+            // 대조할 번호 정보가 없어 같은 사람인지 다른 사람인지 판단 불가
+            if (sameSchool.length === 1) return { action: 'update', match: sameSchool[0] };
+            return { action: 'ambiguous' };
         }
 
         function handleExcelUpload(event) {
@@ -1640,7 +1711,7 @@
 
             let headerRowIdx = 0;
             let nameColIdx = -1;
-            let classColIdx = -1;   // '반명' - 이미 완성된 학교+학년 형태(예: 청람중1)
+            let classColIdx = -1;   // '반명' - 이미 완성된 학교+학년 표기(예: 청담중1)
             let schoolColIdx = -1;  // '반명'이 없을 때를 위한 대비용(학교)
             let gradeColIdx = -1;   // '반명'이 없을 때를 위한 대비용(학년)
             let parentPhoneColIdx = -1;
@@ -1657,7 +1728,7 @@
                     if (cellVal.includes("학교") || cellVal.includes("소속")) schoolColIdx = j;
                     if (cellVal.includes("학년")) gradeColIdx = j;
                     if (cellVal.includes("한줄메모") || cellVal.includes("메모")) noteColIdx = j;
-                    // '학부모/보호자/부모'가 포함된 헤더는 학부모 번호로, 나머지 번호/연락처/전화/HP 헤더는 원생 번호로 인식
+                    // '학부모/보호자/부모'가 포함된 헤더는 학부모 번호로, 나머지 번호/연락처/전화/HP 헤더는 학생 번호로 인식
                     if (cellVal.includes("학부모") || cellVal.includes("보호자") || cellVal.includes("부모")) {
                         parentPhoneColIdx = j;
                     } else if (cellVal.includes("번호") || cellVal.includes("연락처") || cellVal.includes("전화") || cellVal.toLowerCase().includes("phone") || cellVal.toUpperCase().includes("HP")) {
@@ -1693,18 +1764,18 @@
                 let name = String(row[nameColIdx] || "").trim();
                 if (!name || name === "이름" || name === "학생명" || name === "성명") continue;
 
-                // '반명' 컬럼이 있으면 그 값을 그대로 매칭 키로 사용 (예: "청람중1")
-                // 없을 때만 학교+학년을 조합해서 대체 매칭 키를 만든다
+                // '반명' 컬럼이 있으면 그 값을 그대로 매칭 키로 사용 (예: "청담중1")
+                // 없으면 학교+학년을 조합해서 대체 매칭 키를 만든다
                 let classNameRaw = classColIdx !== -1 && row[classColIdx] ? String(row[classColIdx]).trim() : "";
                 let school = schoolColIdx !== -1 && row[schoolColIdx] ? String(row[schoolColIdx]).trim() : "";
                 let gradeRaw = gradeColIdx !== -1 && row[gradeColIdx] ? String(row[gradeColIdx]).trim() : "";
                 let gradeDigitMatch = gradeRaw.match(/\d+/);
                 let gradeDigit = gradeDigitMatch ? gradeDigitMatch[0] : "";
                 // 출석부 매칭(어느 강사/시간대에 배정할지)은 반명을 그대로 우선 사용
-                // → 예: "예비고1" 반명 학생은 실제 학년(청라중3)과 무관하게 그 반을 담당하는 강사 원생으로 들어가야 함
+                // → 예: "새비고1" 반명 표시와 실제 학년(청라중3)과 무관하게 그 반을 담당하는 강사 시간표로 들어가야 함
                 let schoolKey = classNameRaw || (school + gradeDigit).trim();
                 // 원생 정보에 표시/저장할 학교값은 학교+학년 조합을 우선 사용 (반명과 실제 학년이 다를 수 있으므로)
-                // → 예: 반명은 "예비고1"이어도 학교 컬럼이 "청라중", 학년 컬럼이 "3학년"이면 "청라중3"으로 표기
+                // → 예: 반명은 "새비고1"이어도 학교 컬럼이 "청라중", 학년 컬럼이 "3학년"이면 "청라중3"으로 표기
                 let schoolForRecord = school ? (school + gradeDigit) : classNameRaw;
 
                 let studentPhone = studentPhoneColIdx !== -1 && row[studentPhoneColIdx] ? String(row[studentPhoneColIdx]).trim() : "";
@@ -1714,26 +1785,28 @@
                 // schoolForRecord가 이미 학교+학년(또는 반명)을 포함하므로 그대로 표시에 사용
                 const displaySchool = schoolForRecord;
 
-                // 이미 등록되어 있는 원생인지 전체 강사 기준으로 확인 (동명이인은 학교/반명으로 구분)
-                const existing = findExistingStudentGlobally(name, schoolForRecord);
-                if (existing.status === 'unique') {
+                // 학교/학년이 같은지, 연락처가 같은지로 "이미 등록된 같은 사람"과 "진짜 동명이인"을 구분
+                const resolution = resolveNewRegistrant(name, schoolForRecord, studentPhone, parentPhone);
+                if (resolution.action === 'update') {
                     let changed = false;
-                    if (studentPhone && !existing.match.student.phone) { existing.match.student.phone = studentPhone; changed = true; }
-                    if (parentPhone && !existing.match.student.parentPhone) { existing.match.student.parentPhone = parentPhone; changed = true; }
+                    if (studentPhone && !resolution.match.student.phone) { resolution.match.student.phone = studentPhone; changed = true; }
+                    if (parentPhone && !resolution.match.student.parentPhone) { resolution.match.student.parentPhone = parentPhone; changed = true; }
                     if (changed) updatedCount++;
                     continue;
                 }
-                if (existing.status === 'ambiguous') {
-                    ambiguousList.push(`${name}(${displaySchool || '학교정보없음'}) - 이미 동명이인으로 등록되어 있어 자동 처리 건너뜀`);
+                if (resolution.action === 'ambiguous') {
+                    ambiguousList.push(`${name}(${displaySchool || '학교정보없음'}) - 같은 학교/학년의 동명이인인지 번호로 구분할 수 없어 자동 처리 건너뜀`);
                     continue;
                 }
+                // resolution.action === 'new' : 학교/학년이 다르면 이름 그대로, 같은 학교/학년의 진짜 동명이인이면 finalName에 B/C.. 접미사가 붙어있음
+                const registerName = resolution.finalName;
 
                 if (!schoolKey) {
                     unmatchedList.push(`${name} (반명/학교/학년 정보 없음)`);
                     continue;
                 }
 
-                // 반명(또는 학교+학년) 문구가 시간대 박스 제목에 포함되는 후보들 수집
+                // 반명(또는 학교+학년) 문구가 시간대 박스 제목에 포함되는 후보들을 좁힌다
                 let candidates = allSlots.filter(c => c.slot.title.includes(schoolKey));
 
                 // 한줄메모에서 요일(금/토/일)을 판별할 수 있으면 먼저 요일로 후보를 좁힌다
@@ -1785,7 +1858,7 @@
                 const firstWeekKey = computeWeekKeyForDate(firstDateObj);
 
                 tData.students.push({
-                    name: name,
+                    name: registerName,
                     school: schoolForRecord || "미입력",
                     grade: gradeDigit,
                     phone: studentPhone,
@@ -1807,8 +1880,8 @@
             }
             saveDataToSupabase('teacherDataStore', teacherDataStore);
 
-            let msg = `[일괄 등록 완료]\n총 ${addedCount}명의 원생을 학교/학년/시간대 자동 조회로 등록했습니다.\n(정확 매칭: ${exactMatchCount}명)`;
-            if (updatedCount > 0) msg += `\n기존 등록된 원생 연락처 업데이트: ${updatedCount}명`;
+            let msg = `[일괄 등록 완료]\n총 ${addedCount}명의 학생을 학교/학년/시간대 자동 조회로 등록했습니다.\n(정확 매칭: ${exactMatchCount}명)`;
+            if (updatedCount > 0) msg += `\n기존 등록된 학생 연락처 업데이트: ${updatedCount}명`;
             if (unmatchedList.length > 0) {
                 msg += `\n\n⚠️ 일치하는 시간대를 찾지 못해 등록되지 않음: ${unmatchedList.length}명`;
                 msg += `\n(${unmatchedList.slice(0, 15).join(' / ')}${unmatchedList.length > 15 ? ' 외 다수' : ''})`;
@@ -1878,7 +1951,7 @@
                     }
 
                     if (nameColIdx === -1 || (phoneColIdx === -1 && parentPhoneColIdx === -1)) {
-                        alert("엑셀에서 '이름'과 '전화번호(연락처)' 또는 '학부모 번호' 컬럼을 찾을 수 없습니다. 헤더 행을 확인해주세요.");
+                        alert("엑셀에서 '이름'과 '전화번호(연락처)' 또는 '학부모 번호' 컬럼을 찾을 수 없습니다. 헤더 형식을 확인해주세요.");
                         return;
                     }
                     headerRowIdx += 1;
@@ -1899,7 +1972,7 @@
                         let parentPhone = parentPhoneColIdx !== -1 && row[parentPhoneColIdx] ? String(row[parentPhoneColIdx]).trim() : "";
                         if (!phone && !parentPhone) continue;
 
-                        // 강사(반) 구분과 무관하게, 전체 데이터에서 이름이 같은 원생을 모두 모아
+                        // 강사(반) 구분과 무관하게, 전체 데이터에서 이름이 같은 학생을 모두 모음
                         // 동명이인 여부를 먼저 판별한다. (반이 달라도 동명이인은 동명이인!)
                         let globalCandidates = [];
                         for (let tName in teacherDataStore) {
@@ -1913,7 +1986,7 @@
                         let targets = globalCandidates;
 
                         if (globalCandidates.length > 1) {
-                            // 동명이인이 있는 경우, 학교 정보로 정확히 구분되는 원생에게만 반영한다.
+                            // 동명이인이 있는 경우, 학교 정보로 정확히 구분되는 학생에게만 반영한다.
                             // (공백 차이로 인한 오매칭 방지를 위해 공백을 제거하고 비교)
                             if (school) {
                                 const normalize = (str) => String(str || "").replace(/\s+/g, "");
@@ -1923,7 +1996,7 @@
                             }
 
                             if (targets.length === 0) {
-                                // 학교가 없거나 일치하는 대상이 없으면, 잘못 적용될 위험이 있으므로 건너뛴다.
+                                // 학교가 없거나 일치하는 대상이 없으면, 잘못 적용될 위험이 있으므로 건너뜁니다.
                                 skippedAmbiguous.push(school ? `${name}(${school})` : `${name} (동명이인 ${globalCandidates.length}명, 학교정보 없음)`);
                                 continue;
                             }
@@ -1931,7 +2004,7 @@
                             if (targets.length > 1) {
                                 // 이름과 학교까지 같은 진짜 동명이인 -> 자동으로 구분할 방법이 없으므로
                                 // 잘못된 사람에게 번호가 들어가는 것을 막기 위해 건너뛰고 수동 처리로 넘긴다.
-                                skippedAmbiguous.push(`${name}(${school}) - 같은 학교에 동명이인 ${targets.length}명`);
+                                skippedAmbiguous.push(`${name}(${school}) - 같은 학교의 동명이인 ${targets.length}명`);
                                 continue;
                             }
                         }
@@ -1950,9 +2023,9 @@
                     renderFullApp(getCurrentActiveTeacher());
                     saveDataToSupabase('teacherDataStore', teacherDataStore);
 
-                    let msg = `[전화번호 일괄 업데이트 완료]\n번호가 등록된 원생: ${matchedCount}명`;
+                    let msg = `[전화번호 일괄 업데이트 완료]\n번호가 등록된 학생: ${matchedCount}명`;
                     if (notFoundNames.length > 0) {
-                        msg += `\n일치하는 원생을 찾지 못함: ${notFoundNames.length}명`;
+                        msg += `\n일치하는 학생을 찾지 못함: ${notFoundNames.length}명`;
                         if (notFoundNames.length <= 15) {
                             msg += `\n(${notFoundNames.join(', ')})`;
                         }
@@ -1974,8 +2047,8 @@
             reader.readAsArrayBuffer(file);
         }
 
-        // 퇴원 처리: 퇴원일은 항상 처리하는 "오늘" 날짜로 기록. 퇴원일이 속한 주차까지는 출석부에 표시되고,
-        // 그 다음 주차부터는 isVisibleInWeek()에 의해 자동으로 출석부에서 빠짐 (재원생 목록에서도 제외되고 퇴원생 목록으로 이동).
+        // 퇴원 처리: 퇴원일은 항상 처리하는 "오늘" 날짜로 기록. 퇴원일이 속한 주차까지는
+        // 출석부에 표시되고, 그 다음 주차부터는 isVisibleInWeek()에 의해 자동으로 출석부에서 빠짐 (재원생 목록에서는 제외되고 퇴원생 목록으로 이동).
         function handleWithdrawFromModal() {
             const teacherName = studentModalTeacherName;
             const data = teacherDataStore[teacherName];
@@ -2011,6 +2084,80 @@
 
             saveDataToSupabase('teacherDataStore', teacherDataStore);
             renderFullApp(teacherName);
+            closeStudentModal();
+        }
+
+        // 완전 삭제: 퇴원 처리와 달리 학생 데이터(원생 목록/출석 기록/임시 시간표 이동 기록)를 되돌릴 수 없게 전부 지운다.
+        function removeStudentEverywhere(teacherName, index) {
+            const data = teacherDataStore[teacherName];
+            if (!data) return null;
+            const student = data.students[index];
+            if (!student) return null;
+
+            data.students.splice(index, 1);
+
+            // 해당 학생의 출석 기록(모든 주차, 개별 기록 + 옛 형식 기록 모두)을 정리
+            Object.keys(attendanceRecords).forEach(weekKey => {
+                const weekRecords = attendanceRecords[weekKey];
+                if (!weekRecords) return;
+                Object.keys(weekRecords).forEach(key => {
+                    if (key === student.name || key.startsWith(`${student.name}__`)) {
+                        delete weekRecords[key];
+                    }
+                });
+            });
+
+            // 해당 학생의 주차별 임시 시간표 이동 기록 정리
+            Object.keys(weeklyOverrides).forEach(weekKey => {
+                const wk = weeklyOverrides[weekKey];
+                if (wk && wk[teacherName] && wk[teacherName][student.name]) {
+                    delete wk[teacherName][student.name];
+                }
+            });
+
+            saveDataToSupabase('teacherDataStore', teacherDataStore);
+            saveDataToSupabase('attendanceRecords', attendanceRecords);
+            saveDataToSupabase('weeklyOverrides', weeklyOverrides);
+
+            return student;
+        }
+
+        function refreshAfterStudentListChange(teacherName) {
+            const currentTeacher = getCurrentActiveTeacher();
+            if (currentTeacher === "통합출석부") {
+                renderIntegratedTimetable();
+                renderManagementStudents(currentTeacher);
+            } else {
+                renderFullApp(teacherName);
+            }
+        }
+
+        // 원생 관리 목록의 '삭제' 버튼: 퇴원 처리와 별개로, 완전히 데이터를 지운다 (되돌릴 수 없음).
+        function handleDeleteStudent(teacherName, index) {
+            const data = teacherDataStore[teacherName];
+            if (!data) return;
+            const student = data.students[index];
+            if (!student) return;
+
+            if (!confirm(`${student.name} 학생을 완전히 삭제하시겠습니까?\n\n퇴원 처리와 달리 원생 목록, 출석부 기록이 전부 사라지며 되돌릴 수 없습니다.`)) return;
+
+            removeStudentEverywhere(teacherName, index);
+            refreshAfterStudentListChange(teacherName);
+        }
+
+        // 학생 정보 수정 모달 안의 '완전 삭제' 버튼
+        function handleDeleteFromModal() {
+            const teacherName = studentModalTeacherName;
+            const index = studentModalEditIndex;
+            const data = teacherDataStore[teacherName];
+            if (!data) return;
+            const student = data.students[index];
+            if (!student) return;
+
+            if (!confirm(`${student.name} 학생을 완전히 삭제하시겠습니까?\n\n퇴원 처리와 달리 원생 목록, 출석부 기록이 전부 사라지며 되돌릴 수 없습니다.`)) return;
+
+            removeStudentEverywhere(teacherName, index);
+            refreshAfterStudentListChange(teacherName);
             closeStudentModal();
         }
 
@@ -2078,7 +2225,7 @@
             }
 
             if (targetReservations.length === 0) {
-                container.innerHTML = '<div class="text-sm text-zinc-400 py-8 text-center">현재 접수된 전송 예약 내역이 없습니다.</div>';
+                container.innerHTML = '<div class="text-sm text-zinc-400 py-8 text-center">현재 예약된 전송 예약 내역이 없습니다.</div>';
                 return;
             }
 
@@ -2088,7 +2235,7 @@
                     ? res.recipients.map(r => `${r.name}(${typeLabel[r.type] || r.type})`).join(', ')
                     : (res.students ? res.students.join(', ') : '정보 없음');
                 const targetCountLabel = res.recipients ? res.recipients.length : res.studentCount;
-                
+
                 let adminActionButtons = '';
                 if (isAdminLoggedIn) {
                     adminActionButtons = `
@@ -2119,9 +2266,9 @@
 
         function updateReservationStatus(id, newStatus) {
             const target = globalReservations.find(r => r.id === id);
-            if(target) { 
-                target.status = newStatus; 
-                renderAdminReservations(); 
+            if(target) {
+                target.status = newStatus;
+                renderAdminReservations();
                 saveDataToSupabase('globalReservations', globalReservations);
             }
         }
@@ -2193,10 +2340,10 @@
             if (descEl) {
                 descEl.innerText = isAdminLoggedIn
                     ? "오른쪽 미배정 목록의 반을 드래그해서 강의실 칸에 넣거나, 배정된 반을 다시 꺼낼 수 있습니다."
-                    : "현재 배정된 강의실 현황을 확인할 수 있습니다. (배정 수정은 관리자 모드에서만 가능합니다)";
+                    : "현재 배정된 강의실 현황을 확인할 수 있습니다. (배정 작업은 관리자 모드에서만 가능합니다)";
             }
 
-            // 강사 로그인일 때는 미배정 반 목록을 숨기고 배정표를 전체 폭으로 확장
+            // 강사 로그인일 때는 미배정 대반 목록을 숨기고 배정표를 전체 탭으로 확장
             const poolPanel = document.getElementById("classroom-pool-panel");
             const gridPanel = document.getElementById("classroom-grid-panel");
             if (poolPanel && gridPanel) {
@@ -2214,7 +2361,7 @@
             switchClassroomDay(currentClassroomDay);
         }
 
-        const GRID_BORDER = 'box-shadow: inset 0 0 0 1px rgba(0,0,0,0.18);'; // 강의실 배정표 전체(헤더·칸·배정 블록)에 공통으로 쓰는 단일 테두리 스타일. 기존 헤더(0.18)/칸(0.35) 두 종류를 하나로 통일, 진하기도 살짝 낮춰 더 얇아 보이게 함
+        const GRID_BORDER = 'box-shadow: inset 0 0 0 1px rgba(0,0,0,0.18);'; // 강의실 배정표 전체(헤더·칸·배정 블록)이 공통으로 쓰는 단일 팔레트 스타일. 기존 헤더(0.18)/칸(0.35) 두 종류를 하나로 통일, 진하기도 살짝 낮춰 더 얇아 보이게 함
 
         function renderClassroomGrid(day) {
             if (!classroomAssignments[day]) classroomAssignments[day] = {};
@@ -2256,7 +2403,7 @@
                 });
             });
 
-            // 건물(관)별로 연속된 강의실을 묶어서 상단 헤더에 colspan으로 표시
+            // 건물(관)별로 연속된 강의실을 묶어서 상단 헤더의 colspan으로 표시
             const buildingGroups = [];
             CLASSROOM_LIST.forEach(r => {
                 const last = buildingGroups[buildingGroups.length - 1];
@@ -2272,7 +2419,7 @@
             ).join('');
 
             const ROW_HEIGHT = 46; // 한 시간(1행)의 고정 높이(px). 배정 블록의 높이 계산과 반드시 일치해야 함.
-            const CELL_BORDER = GRID_BORDER; // 배경색과 무관하게 항상 보이는 고정 대비 테두리 (파스텔 배경에서 테두리가 묻히는 것 방지) — 표 전체와 두께·색을 통일
+            const CELL_BORDER = GRID_BORDER; // 배경색과 무관하게 항상 보이는 고정 두께 팔레트 (테두시트 배경색에 팔레트가 묻히는 것 방지) → 표 전체의 두께·색상 통일
 
             let bodyRows = '';
             hours.forEach(h => {
@@ -2311,7 +2458,7 @@
             });
 
             const TIME_COL_WIDTH = 90;
-            const ROOM_COL_WIDTH = 90; // 모든 강의실 칸을 이 너비로 고정 (배정된 수업 박스의 긴 글자 때문에 칸이 제멋대로 넓어지는 것을 방지)
+            const ROOM_COL_WIDTH = 90; // 모든 강의실 칸의 열 너비를 고정 (배정된 반의 긴 글자 때문에 칸이 제멋대로 늘어지는 것을 방지)
             const totalTableWidth = TIME_COL_WIDTH + ROOM_COL_WIDTH * CLASSROOM_LIST.length;
             const colgroupHtml = `<colgroup><col style="width:${TIME_COL_WIDTH}px;">${CLASSROOM_LIST.map(() => `<col style="width:${ROOM_COL_WIDTH}px;">`).join('')}</colgroup>`;
 
@@ -2391,7 +2538,7 @@
             if (!classroomAssignments[day]) classroomAssignments[day] = {};
             const info = getClassroomSlotInfoByKey(day, key);
             if (!info || !info.range) {
-                alert("이 반은 시간대를 인식할 수 없어 강의실에 배정할 수 없습니다. 반 이름에 시간 표기(예: 오후 2시 - 오후 5시)를 확인해주세요.");
+                alert("이 반은 시간대를 인식할 수 없어 강의실에 배정할 수 없습니다. 반 이름의 시간 표기(예: 오후 2시 - 오후 5시)를 확인해주세요.");
                 return;
             }
             const assignments = classroomAssignments[day];
@@ -2423,7 +2570,7 @@
             const mngBtn = document.getElementById("tab-management-btn");
             const classroomBtn = document.getElementById("tab-classroom-btn");
             const adminResBtn = document.getElementById("tab-admin-reservations-btn");
-            
+
             const attSec = document.getElementById("tab-attendance");
             const mngSec = document.getElementById("tab-management");
             const classroomSec = document.getElementById("tab-classroom");
@@ -2433,7 +2580,7 @@
             mngBtn.className = "px-4 py-2 rounded-lg font-semibold text-zinc-600 hover:bg-zinc-100 transition";
             if(classroomBtn) classroomBtn.className = "px-4 py-2 rounded-lg font-semibold text-zinc-600 hover:bg-zinc-100 transition";
             if(adminResBtn) adminResBtn.className = "px-4 py-2 rounded-lg font-semibold text-zinc-600 hover:bg-zinc-100 transition";
-            
+
             attSec.classList.add("hidden");
             mngSec.classList.add("hidden");
             if(classroomSec) classroomSec.classList.add("hidden");
@@ -2475,7 +2622,7 @@
             const currentTeacher = getCurrentActiveTeacher();
             if (currentTeacher === "통합출석부") return;
 
-            const timeLabel = prompt("추가할 반 이름 및 시간대를 입력하세요 (예: 청람중1 (오후 2시 - 오후 5시)):");
+            const timeLabel = prompt("추가할 반 이름 및 시간대를 입력하세요 (예: 청담중1 (오후 2시 - 오후 5시)):");
             if (!timeLabel) return;
 
             if (!teacherDataStore[currentTeacher]) initDefaultTeacherData(currentTeacher);
@@ -2492,7 +2639,7 @@
             if (!slot) return;
 
             const action = prompt(`[${slot.title}] 시간대 박스 관리\n원하시는 작업을 입력하세요:\n1. 이름 수정\n2. 박스 삭제`, "1");
-            
+
             if (action === "1" || action === "이름 수정") {
                 const newTitle = prompt("변경할 반 이름 및 시간대를 입력하세요:", slot.title);
                 if (newTitle && newTitle.trim() !== "") {
@@ -2501,7 +2648,7 @@
                     saveDataToSupabase('teacherDataStore', teacherDataStore);
                 }
             } else if (action === "2" || action === "박스 삭제") {
-                if (confirm(`정말 "${slot.title}" 박스를 삭제하시겠습니까?\n이 시간대에만 등록된 학생은 목록에서 함께 해제되고, 다른 시간표에도 등록된 학생은 그 시간표에 그대로 남습니다.`)) {
+                if (confirm(`정말 "${slot.title}" 박스를 삭제하시겠습니까?\n이 시간대에만 등록된 학생은 목록에서 함께 퇴장 되고, 다른 시간표에는 등록된 학생은 그 시간표에 그대로 남습니다.`)) {
                     data.slots[dayKey] = data.slots[dayKey].filter(s => s.id !== slotId);
                     data.students.forEach(s => {
                         const ids = getStudentSlotIds(s).filter(id => id !== slotId);
@@ -2509,7 +2656,7 @@
                         delete s.slotId;
                     });
                     data.students = data.students.filter(s => s.slotIds.length > 0);
-                    // 삭제된 반이 강의실에 배정돼 있었다면 배정 정보도 함께 정리
+                    // 삭제된 반이 강의실에 배정되어 있었다면 배정 정보도 함께 정리
                     const classroomKey = `${teacherName}::${slotId}`;
                     if (classroomAssignments[dayKey] && classroomAssignments[dayKey][classroomKey]) {
                         delete classroomAssignments[dayKey][classroomKey];
