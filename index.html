@@ -81,8 +81,8 @@
             <div class="flex items-center space-x-6">
                 <nav class="space-x-2">
                     <button onclick="switchTab('attendance')" id="tab-attendance-btn" class="px-4 py-2 rounded-lg font-semibold bg-primary text-white transition">출석부</button>
-                    <button onclick="switchTab('management')" id="tab-management-btn" class="px-4 py-2 rounded-lg font-semibold text-zinc-600 hover:bg-zinc-100 transition">원생 관리</button>
                     <button onclick="switchTab('classroom')" id="tab-classroom-btn" class="px-4 py-2 rounded-lg font-semibold text-zinc-600 hover:bg-zinc-100 transition">강의실 배정표</button>
+                    <button onclick="switchTab('management')" id="tab-management-btn" class="px-4 py-2 rounded-lg font-semibold text-zinc-600 hover:bg-zinc-100 transition">원생 관리</button>
                     <button onclick="switchTab('admin-reservations')" id="tab-admin-reservations-btn" class="px-4 py-2 rounded-lg font-semibold text-zinc-600 hover:bg-zinc-100 transition">전송 예약 관리</button>
                 </nav>
                 <button onclick="handleLogout()" class="text-sm text-red-500 hover:underline">로그아웃</button>
@@ -2053,6 +2053,8 @@
             switchClassroomDay(currentClassroomDay);
         }
 
+        const GRID_BORDER = 'box-shadow: inset 0 0 0 1px rgba(0,0,0,0.18);'; // 강의실 배정표 전체(헤더·칸·배정 블록)에 공통으로 쓰는 단일 테두리 스타일. 기존 헤더(0.18)/칸(0.35) 두 종류를 하나로 통일, 진하기도 살짝 낮춰 더 얇아 보이게 함
+
         function renderClassroomGrid(day) {
             if (!classroomAssignments[day]) classroomAssignments[day] = {};
             const assignments = classroomAssignments[day];
@@ -2102,14 +2104,14 @@
             });
 
             const headerRow1 = buildingGroups.map(g =>
-                `<th colspan="${g.count}" class="bg-zinc-100 text-zinc-700 text-xs font-bold py-1.5" style="box-shadow: inset 0 0 0 1px rgba(0,0,0,0.18);">${g.building} (${g.floor}층)</th>`
+                `<th colspan="${g.count}" class="bg-zinc-100 text-zinc-700 text-xs font-bold py-1.5" style="${GRID_BORDER}">${g.building} (${g.floor}층)</th>`
             ).join('');
             const headerRow2 = CLASSROOM_LIST.map(r =>
-                `<th class="bg-zinc-50 text-zinc-700 text-[11px] font-bold py-1.5 px-1" style="box-shadow: inset 0 0 0 1px rgba(0,0,0,0.18);">${r.label}<br><span class="text-[10px] text-zinc-400 font-normal">정원 ${r.capacity}명</span></th>`
+                `<th class="bg-zinc-50 text-zinc-700 text-[11px] font-bold py-1.5 px-1" style="${GRID_BORDER}">${r.label}<br><span class="text-[10px] text-zinc-400 font-normal">정원 ${r.capacity}명</span></th>`
             ).join('');
 
             const ROW_HEIGHT = 46; // 한 시간(1행)의 고정 높이(px). 배정 블록의 높이 계산과 반드시 일치해야 함.
-            const CELL_BORDER = 'box-shadow: inset 0 0 0 1px rgba(0,0,0,0.35);'; // 배경색과 무관하게 항상 보이는 고정 대비 테두리 (파스텔 배경에서 테두리가 묻히는 것 방지)
+            const CELL_BORDER = GRID_BORDER; // 배경색과 무관하게 항상 보이는 고정 대비 테두리 (파스텔 배경에서 테두리가 묻히는 것 방지) — 표 전체와 두께·색을 통일
 
             let bodyRows = '';
             hours.forEach(h => {
@@ -2131,7 +2133,7 @@
                         const namePart = titleMatch ? titleMatch[1].trim() : occ.item.slot.title;
                         rowHtml += `
                             <td rowspan="${duration}" class="align-top p-0" style="height:${blockHeight}px;">
-                                <div ${dragAttr} class="w-full p-2 text-[11px] leading-tight box-border overflow-hidden ${isAdminLoggedIn ? 'cursor-grab active:cursor-grabbing' : ''}" style="background:${color}; height:${blockHeight}px; border:1px solid rgba(0,0,0,0.35); text-align:center; display:flex; flex-direction:column; align-items:center; justify-content:center;">
+                                <div ${dragAttr} class="w-full p-2 text-[11px] leading-tight box-border overflow-hidden ${isAdminLoggedIn ? 'cursor-grab active:cursor-grabbing' : ''}" style="background:${color}; height:${blockHeight}px; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.18); text-align:center; display:flex; flex-direction:column; align-items:center; justify-content:center;">
                                     <div class="font-bold ${dark ? 'text-white' : 'text-zinc-800'} truncate" style="width:100%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${namePart}</div>
                                     <div class="${dark ? 'text-white' : 'text-primary'} font-semibold">${occ.item.teacherName}T</div>
                                     <div class="${overCap ? (dark ? 'text-rose-200 font-extrabold' : 'text-rose-600 font-extrabold') : (dark ? 'text-zinc-200 font-semibold' : 'text-zinc-500 font-semibold')}">(${occ.item.count}/${r.capacity})</div>
@@ -2158,8 +2160,8 @@
                     <table class="border-collapse text-xs" style="table-layout:fixed; width:${totalTableWidth}px;">
                         ${colgroupHtml}
                         <thead>
-                            <tr><th class="bg-white" style="box-shadow: inset 0 0 0 1px rgba(0,0,0,0.18);"></th>${headerRow1}</tr>
-                            <tr><th class="bg-white" style="box-shadow: inset 0 0 0 1px rgba(0,0,0,0.18);"></th>${headerRow2}</tr>
+                            <tr><th class="bg-white" style="${GRID_BORDER}"></th>${headerRow1}</tr>
+                            <tr><th class="bg-white" style="${GRID_BORDER}"></th>${headerRow2}</tr>
                         </thead>
                         <tbody>${bodyRows}</tbody>
                     </table>
