@@ -304,6 +304,10 @@
                         <label class="text-xs font-semibold text-zinc-600">학부모 전화번호</label>
                         <input type="text" id="student-modal-parent-phone" placeholder="010-1234-5678" class="w-full border border-zinc-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
                     </div>
+                    <div class="space-y-1">
+                        <label class="text-xs font-semibold text-zinc-600">등록일</label>
+                        <input type="date" id="student-modal-registered-at" class="w-full border border-zinc-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
+                    </div>
                 </div>
                 <div class="space-y-1.5">
                     <label class="text-xs font-semibold text-zinc-600">시간표 배치 (여러 개 선택 가능)</label>
@@ -545,6 +549,14 @@
             let month = String(dateObj.getMonth() + 1).padStart(2, '0');
             let day = String(dateObj.getDate()).padStart(2, '0');
             return `${year}-${month}-${day}`;
+        }
+
+        // "YYYY-MM-DD" 문자열(<input type="date"> 값 등)을 UTC 파싱으로 인한 하루 밀림 없이 로컬 Date로 변환
+        function parseYmdToLocalDate(str) {
+            if (!str) return null;
+            const parts = str.split('-').map(n => parseInt(n, 10));
+            if (parts.length !== 3 || parts.some(isNaN)) return null;
+            return new Date(parts[0], parts[1] - 1, parts[2]);
         }
 
         async function changeWeek(weekKey) {
@@ -1441,6 +1453,8 @@
             document.getElementById("student-modal-school").value = student ? student.school : "";
             document.getElementById("student-modal-phone").value = student ? (student.phone || "") : "";
             document.getElementById("student-modal-parent-phone").value = student ? (student.parentPhone || "") : "";
+            // 등록일: 기존 값이 있으면 그대로, 없으면(과거에 등록일 없이 들어간 학생/신규 등록) 오늘 날짜를 기본값으로 채워줌
+            document.getElementById("student-modal-registered-at").value = (student && student.registeredAt) ? student.registeredAt : getFormattedDate(new Date());
 
             const currentSlotIds = student ? getStudentSlotIds(student) : [];
             const dayNameKo = { friday: '금요일', saturday: '토요일', sunday: '일요일' };
@@ -1535,6 +1549,10 @@
             const school = document.getElementById("student-modal-school").value.trim() || "미입력";
             const phone = document.getElementById("student-modal-phone").value.trim();
             const parentPhone = document.getElementById("student-modal-parent-phone").value.trim();
+            const registeredAtInput = document.getElementById("student-modal-registered-at").value;
+            const registeredDateObj = parseYmdToLocalDate(registeredAtInput) || new Date();
+            const registeredAt = getFormattedDate(registeredDateObj);
+            const firstWeekKey = computeWeekKeyForDate(registeredDateObj);
 
             const chosenIds = Array.from(document.querySelectorAll('.student-modal-slot-checkbox:checked')).map(cb => cb.value);
             if (chosenIds.length === 0) {
@@ -1550,11 +1568,12 @@
                 student.phone = phone;
                 student.parentPhone = parentPhone;
                 student.slotIds = chosenIds;
+                student.registeredAt = registeredAt;
+                student.firstWeekKey = firstWeekKey;
                 delete student.slotId;
             } else {
-                // 수동 등록도 등록일(오늘) 주차부터 출석부에 표시되도록 firstWeekKey/registeredAt 저장
-                const today = new Date();
-                data.students.push({ name, school, phone, parentPhone, slotIds: chosenIds, firstWeekKey: computeWeekKeyForDate(today), registeredAt: getFormattedDate(today) });
+                // 등록일 입력값(없으면 오늘) 기준으로 firstWeekKey/registeredAt 저장 -> 그 날짜가 속한 주차부터 출석부에 표시
+                data.students.push({ name, school, phone, parentPhone, slotIds: chosenIds, firstWeekKey: firstWeekKey, registeredAt: registeredAt });
             }
 
             renderFullApp(teacherName);
