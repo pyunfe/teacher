@@ -2098,10 +2098,13 @@
                         const overCap = occ.item.count > r.capacity;
                         const dragAttr = isAdminLoggedIn ? `draggable="true" ondragstart="handleClassroomBlockDragStart(event,'${occ.item.key}')"` : '';
                         const removeBtn = isAdminLoggedIn ? `<button onclick="unassignClassroomSlot('${day}','${occ.item.key}')" class="text-[10px] text-rose-500 hover:underline font-semibold mt-1">빼기</button>` : '';
+                        // "반이름 (시간대)" 형태의 제목에서 반이름만 표시용으로 분리 (시간 데이터 자체는 range에 그대로 유지되어 박스 길이 계산에 계속 사용됨)
+                        const titleMatch = occ.item.slot.title.match(/^(.*?)\s*\(([^)]*)\)\s*$/);
+                        const namePart = titleMatch ? titleMatch[1].trim() : occ.item.slot.title;
                         rowHtml += `
                             <td rowspan="${duration}" class="border border-zinc-200 align-top p-0" style="height:${blockHeight}px;">
-                                <div ${dragAttr} class="w-full p-2 text-[11px] leading-tight box-border overflow-hidden ${isAdminLoggedIn ? 'cursor-grab active:cursor-grabbing' : ''}" style="background:${color}; height:${blockHeight}px;">
-                                    <div class="font-bold text-zinc-800 truncate" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${occ.item.slot.title}</div>
+                                <div ${dragAttr} class="w-full p-2 text-[11px] leading-tight box-border overflow-hidden ${isAdminLoggedIn ? 'cursor-grab active:cursor-grabbing' : ''}" style="background:${color}; height:${blockHeight}px; text-align:center; display:flex; flex-direction:column; align-items:center; justify-content:center;">
+                                    <div class="font-bold text-zinc-800 truncate" style="width:100%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${namePart}</div>
                                     <div class="text-primary font-semibold">${occ.item.teacherName}T</div>
                                     <div class="${overCap ? 'text-rose-600 font-extrabold' : 'text-zinc-500 font-semibold'}">(${occ.item.count}/${r.capacity})</div>
                                     ${removeBtn}
