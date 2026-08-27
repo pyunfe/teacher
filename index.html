@@ -2101,7 +2101,7 @@
                         rowHtml += `
                             <td rowspan="${duration}" class="border border-zinc-200 align-top p-0" style="height:${blockHeight}px;">
                                 <div ${dragAttr} class="w-full p-2 text-[11px] leading-tight box-border overflow-hidden ${isAdminLoggedIn ? 'cursor-grab active:cursor-grabbing' : ''}" style="background:${color}; height:${blockHeight}px;">
-                                    <div class="font-bold text-zinc-800 truncate">${occ.item.slot.title}</div>
+                                    <div class="font-bold text-zinc-800 truncate" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${occ.item.slot.title}</div>
                                     <div class="text-primary font-semibold">${occ.item.teacherName}T</div>
                                     <div class="${overCap ? 'text-rose-600 font-extrabold' : 'text-zinc-500 font-semibold'}">(${occ.item.count}/${r.capacity})</div>
                                     ${removeBtn}
@@ -2116,12 +2116,18 @@
                 bodyRows += rowHtml;
             });
 
+            const TIME_COL_WIDTH = 90;
+            const ROOM_COL_WIDTH = 90; // 모든 강의실 칸을 이 너비로 고정 (배정된 수업 박스의 긴 글자 때문에 칸이 제멋대로 넓어지는 것을 방지)
+            const totalTableWidth = TIME_COL_WIDTH + ROOM_COL_WIDTH * CLASSROOM_LIST.length;
+            const colgroupHtml = `<colgroup><col style="width:${TIME_COL_WIDTH}px;">${CLASSROOM_LIST.map(() => `<col style="width:${ROOM_COL_WIDTH}px;">`).join('')}</colgroup>`;
+
             const gridContainer = document.getElementById("classroom-grid-container");
             if (gridContainer) {
                 gridContainer.innerHTML = `
-                    <table class="border-collapse text-xs" style="min-width: 900px;">
+                    <table class="border-collapse text-xs" style="table-layout:fixed; width:${totalTableWidth}px;">
+                        ${colgroupHtml}
                         <thead>
-                            <tr><th class="border border-zinc-200 bg-white" style="width:90px;"></th>${headerRow1}</tr>
+                            <tr><th class="border border-zinc-200 bg-white"></th>${headerRow1}</tr>
                             <tr><th class="border border-zinc-200 bg-white"></th>${headerRow2}</tr>
                         </thead>
                         <tbody>${bodyRows}</tbody>
