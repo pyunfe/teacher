@@ -82,6 +82,7 @@
                 <nav class="space-x-2">
                     <button onclick="switchTab('attendance')" id="tab-attendance-btn" class="px-4 py-2 rounded-lg font-semibold bg-primary text-white transition">출석부</button>
                     <button onclick="switchTab('management')" id="tab-management-btn" class="px-4 py-2 rounded-lg font-semibold text-zinc-600 hover:bg-zinc-100 transition">원생 관리</button>
+                    <button onclick="switchTab('classroom')" id="tab-classroom-btn" class="px-4 py-2 rounded-lg font-semibold text-zinc-600 hover:bg-zinc-100 transition">강의실 배정표</button>
                     <button onclick="switchTab('admin-reservations')" id="tab-admin-reservations-btn" class="px-4 py-2 rounded-lg font-semibold text-zinc-600 hover:bg-zinc-100 transition">전송 예약 관리</button>
                 </nav>
                 <button onclick="handleLogout()" class="text-sm text-red-500 hover:underline">로그아웃</button>
@@ -209,6 +210,33 @@
                 </div>
             </section>
 
+            <section id="tab-classroom" class="hidden space-y-6">
+                <div class="flex flex-wrap justify-between items-center gap-3 bg-white p-4 rounded-2xl shadow-sm border border-zinc-200">
+                    <div>
+                        <h2 class="text-xl font-bold text-zinc-800">강의실 배정표</h2>
+                        <p class="text-xs text-zinc-500" id="classroom-mode-desc">현재 배정 현황을 확인할 수 있습니다.</p>
+                    </div>
+                    <div class="flex items-center space-x-2" id="classroom-day-tabs">
+                        <button onclick="switchClassroomDay('friday')" id="classroom-day-friday-btn" class="px-3 py-1.5 rounded-lg text-sm font-semibold transition">금요일</button>
+                        <button onclick="switchClassroomDay('saturday')" id="classroom-day-saturday-btn" class="px-3 py-1.5 rounded-lg text-sm font-semibold transition">토요일</button>
+                        <button onclick="switchClassroomDay('sunday')" id="classroom-day-sunday-btn" class="px-3 py-1.5 rounded-lg text-sm font-semibold transition">일요일</button>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                    <div class="lg:col-span-9 bg-white p-4 rounded-2xl shadow-sm border border-zinc-200 overflow-x-auto horizontal-scroll-container">
+                        <div id="classroom-grid-container"></div>
+                    </div>
+                    <div class="lg:col-span-3 bg-white p-4 rounded-2xl shadow-sm border border-zinc-200 space-y-3">
+                        <div class="flex justify-between items-center">
+                            <h3 class="font-bold text-sm text-zinc-800">미배정 반 목록</h3>
+                            <span class="text-xs text-zinc-400" id="classroom-pool-count"></span>
+                        </div>
+                        <div id="classroom-pool-list" class="space-y-2 max-h-[720px] overflow-y-auto pr-1" ondragover="handleClassroomPoolDragOver(event)" ondrop="handleClassroomPoolDrop(event)"></div>
+                    </div>
+                </div>
+            </section>
+
             <section id="tab-admin-reservations" class="hidden space-y-6">
                 <div>
                     <h2 class="text-xl font-bold text-zinc-800" id="admin-res-page-title">카카오톡 전송 예약 관리</h2>
@@ -320,6 +348,34 @@
             "고광준", "이영찬", "오세현"
         ];
 
+        // ===== 강의실 배정표 =====
+        // 왼쪽에서 오른쪽으로 8층 -> 7층 -> 6층 -> 5층 순서로 배치
+        const CLASSROOM_LIST = [
+            { id: 'main-1',    building: '본관',  label: '1강의실',     floor: 8, capacity: 10 },
+            { id: 'b3-7',      building: '3관',   label: '7강의실',     floor: 8, capacity: 25 },
+            { id: 'b3-8',      building: '3관',   label: '8강의실',     floor: 8, capacity: 35 },
+            { id: 'b5-12',     building: '5관',   label: '12강의실',    floor: 8, capacity: 35 },
+            { id: 'b10-18',    building: '10관',  label: '18강의실',    floor: 7, capacity: 20 },
+            { id: 'b10-19',    building: '10관',  label: '19강의실',    floor: 7, capacity: 15 },
+            { id: 'b4-9',      building: '4관',   label: '9강의실',     floor: 6, capacity: 25 },
+            { id: 'b4-10',     building: '4관',   label: '10강의실',    floor: 6, capacity: 30 },
+            { id: 'sea-16',    building: '바다관', label: '16강의실',    floor: 6, capacity: 30 },
+            { id: 'sea-17',    building: '바다관', label: '17강의실',    floor: 6, capacity: 35 },
+            { id: 'b7-1314',   building: '7관',   label: '13-14강의실', floor: 5, capacity: 45 },
+            { id: 'b7-15',     building: '7관',   label: '15강의실',    floor: 5, capacity: 45 },
+        ];
+
+        const TEACHER_COLORS = {
+            "황성웅": "#FDE68A", "정다운": "#BFDBFE", "김신형": "#DDD6FE", "문지현": "#A7F3D0",
+            "강윤지": "#FCA5A5", "이현영": "#FDBA74", "김명일": "#A5B4FC", "김준영": "#F9A8D4",
+            "박신언": "#7DD3FC", "윤태민": "#BEF264", "고광준": "#FDA4AF", "이영찬": "#D8B4FE",
+            "오세현": "#5EEAD4"
+        };
+
+        // 구조: { friday: { "강사명::슬롯id": "강의실id" }, saturday: {...}, sunday: {...} }
+        var classroomAssignments = { friday: {}, saturday: {}, sunday: {} };
+        var currentClassroomDay = "friday";
+
         async function loadDataFromSupabase() {
             if (!supabaseClient) return;
             try {
@@ -334,6 +390,13 @@
                         if (row.id === 'attendanceRecords') attendanceRecords = row.data;
                         if (row.id === 'globalReservations') globalReservations = row.data;
                         if (row.id === 'weeklyOverrides') weeklyOverrides = row.data;
+                        if (row.id === 'classroomAssignments' && row.data) {
+                            classroomAssignments = {
+                                friday: row.data.friday || {},
+                                saturday: row.data.saturday || {},
+                                sunday: row.data.sunday || {}
+                            };
+                        }
                     });
                 }
             } catch (err) {
@@ -1900,21 +1963,276 @@
             }
         }
 
+        // ===== 강의실 배정표 =====
+
+        // 강사명::슬롯id 조합으로 특정 슬롯의 시간대/인원 정보를 조회
+        function buildClassroomSlotInfo(teacherName, slot) {
+            const tData = teacherDataStore[teacherName];
+            const rawRange = parseSlotTimeRange(slot.title);
+            let range = null;
+            if (rawRange) {
+                let end = rawRange.end;
+                if (end <= rawRange.start) end = rawRange.start + 1;
+                range = { start: rawRange.start, end };
+            }
+            const count = tData ? tData.students.filter(s => getStudentSlotIds(s).includes(slot.id)).length : 0;
+            return { teacherName, slot, range, count, key: `${teacherName}::${slot.id}` };
+        }
+
+        function getClassroomSlotInfoByKey(day, key) {
+            const sepIdx = key.indexOf('::');
+            if (sepIdx === -1) return null;
+            const tName = key.slice(0, sepIdx);
+            const slotId = key.slice(sepIdx + 2);
+            const tData = teacherDataStore[tName];
+            if (!tData) return null;
+            const slot = (tData.slots[day] || []).find(s => s.id === slotId);
+            if (!slot) return null;
+            return buildClassroomSlotInfo(tName, slot);
+        }
+
+        // 해당 요일에 존재하는 모든 강사의 슬롯(반) 목록을 반환
+        function getAllClassroomDaySlots(day) {
+            const list = [];
+            orderedTeacherNames.forEach(tName => {
+                const tData = teacherDataStore[tName];
+                if (!tData) return;
+                const daySlots = tData.slots[day] || [];
+                daySlots.forEach(slot => {
+                    list.push(buildClassroomSlotInfo(tName, slot));
+                });
+            });
+            return list;
+        }
+
+        function switchClassroomDay(day) {
+            currentClassroomDay = day;
+            ['friday', 'saturday', 'sunday'].forEach(d => {
+                const btn = document.getElementById(`classroom-day-${d}-btn`);
+                if (!btn) return;
+                btn.className = d === day
+                    ? "px-3 py-1.5 rounded-lg text-sm font-semibold transition bg-primary text-white"
+                    : "px-3 py-1.5 rounded-lg text-sm font-semibold transition bg-zinc-100 text-zinc-600 hover:bg-zinc-200";
+            });
+            renderClassroomGrid(day);
+        }
+
+        function renderClassroomTab() {
+            const descEl = document.getElementById("classroom-mode-desc");
+            if (descEl) {
+                descEl.innerText = isAdminLoggedIn
+                    ? "오른쪽 미배정 목록의 반을 드래그해서 강의실 칸에 넣거나, 배정된 반을 다시 꺼낼 수 있습니다."
+                    : "현재 배정된 강의실 현황을 확인할 수 있습니다. (배정 수정은 관리자 모드에서만 가능합니다)";
+            }
+            switchClassroomDay(currentClassroomDay);
+        }
+
+        function renderClassroomGrid(day) {
+            if (!classroomAssignments[day]) classroomAssignments[day] = {};
+            const assignments = classroomAssignments[day];
+            const slots = getAllClassroomDaySlots(day);
+
+            let minStart = null, maxEnd = null;
+            slots.forEach(s => {
+                if (!s.range) return;
+                if (minStart === null || s.range.start < minStart) minStart = s.range.start;
+                if (maxEnd === null || s.range.end > maxEnd) maxEnd = s.range.end;
+            });
+            if (minStart === null) { minStart = 9; maxEnd = 22; }
+
+            const hours = [];
+            for (let h = minStart; h < maxEnd; h++) hours.push(h);
+
+            const roomItems = {};
+            CLASSROOM_LIST.forEach(r => roomItems[r.id] = []);
+            const unassigned = [];
+
+            slots.forEach(s => {
+                const roomId = assignments[s.key];
+                if (roomId && roomItems[roomId] && s.range) {
+                    roomItems[roomId].push(s);
+                } else {
+                    unassigned.push(s);
+                }
+            });
+
+            const occupancy = {};
+            CLASSROOM_LIST.forEach(r => {
+                occupancy[r.id] = {};
+                roomItems[r.id].sort((a, b) => a.range.start - b.range.start);
+                roomItems[r.id].forEach(item => {
+                    for (let h = item.range.start; h < item.range.end; h++) {
+                        occupancy[r.id][h] = { item, isStart: h === item.range.start };
+                    }
+                });
+            });
+
+            // 건물(관)별로 연속된 강의실을 묶어서 상단 헤더에 colspan으로 표시
+            const buildingGroups = [];
+            CLASSROOM_LIST.forEach(r => {
+                const last = buildingGroups[buildingGroups.length - 1];
+                if (last && last.building === r.building && last.floor === r.floor) last.count++;
+                else buildingGroups.push({ building: r.building, floor: r.floor, count: 1 });
+            });
+
+            const headerRow1 = buildingGroups.map(g =>
+                `<th colspan="${g.count}" class="border border-zinc-200 bg-zinc-100 text-zinc-700 text-xs font-bold py-1.5">${g.building} (${g.floor}층)</th>`
+            ).join('');
+            const headerRow2 = CLASSROOM_LIST.map(r =>
+                `<th class="border border-zinc-200 bg-zinc-50 text-zinc-700 text-[11px] font-bold py-1.5 px-1">${r.label}<br><span class="text-[10px] text-zinc-400 font-normal">정원 ${r.capacity}명</span></th>`
+            ).join('');
+
+            let bodyRows = '';
+            hours.forEach(h => {
+                let rowHtml = `<tr><td class="border border-zinc-200 bg-zinc-50 text-[11px] font-semibold text-zinc-600 text-center px-2 whitespace-nowrap">${h}:00 - ${h + 1}:00</td>`;
+                CLASSROOM_LIST.forEach(r => {
+                    const occ = occupancy[r.id][h];
+                    if (occ && !occ.isStart) return; // rowspan으로 이미 이전 행에서 병합된 칸
+
+                    if (occ && occ.isStart) {
+                        const duration = occ.item.range.end - occ.item.range.start;
+                        const color = TEACHER_COLORS[occ.item.teacherName] || '#d4d4d8';
+                        const overCap = occ.item.count > r.capacity;
+                        const dragAttr = isAdminLoggedIn ? `draggable="true" ondragstart="handleClassroomBlockDragStart(event,'${occ.item.key}')"` : '';
+                        const removeBtn = isAdminLoggedIn ? `<button onclick="unassignClassroomSlot('${day}','${occ.item.key}')" class="text-[10px] text-rose-500 hover:underline font-semibold mt-1">빼기</button>` : '';
+                        rowHtml += `
+                            <td rowspan="${duration}" class="border border-zinc-200 align-top p-1">
+                                <div ${dragAttr} class="h-full w-full rounded-lg p-2 text-[11px] leading-tight ${isAdminLoggedIn ? 'cursor-grab active:cursor-grabbing' : ''}" style="background:${color}33; border:1px solid ${color};">
+                                    <div class="font-bold text-zinc-800 truncate">${occ.item.slot.title}</div>
+                                    <div class="text-primary font-semibold">${occ.item.teacherName}T</div>
+                                    <div class="${overCap ? 'text-rose-600 font-extrabold' : 'text-zinc-500 font-semibold'}">(${occ.item.count}/${r.capacity})</div>
+                                    ${removeBtn}
+                                </div>
+                            </td>`;
+                    } else {
+                        const dropAttr = isAdminLoggedIn ? `ondragover="handleClassroomCellDragOver(event)" ondrop="handleClassroomCellDrop(event,'${day}','${r.id}')"` : '';
+                        rowHtml += `<td class="border border-zinc-200" style="height:46px;" ${dropAttr}></td>`;
+                    }
+                });
+                rowHtml += `</tr>`;
+                bodyRows += rowHtml;
+            });
+
+            const gridContainer = document.getElementById("classroom-grid-container");
+            if (gridContainer) {
+                gridContainer.innerHTML = `
+                    <table class="border-collapse text-xs" style="min-width: 900px;">
+                        <thead>
+                            <tr><th class="border border-zinc-200 bg-white" style="width:90px;"></th>${headerRow1}</tr>
+                            <tr><th class="border border-zinc-200 bg-white"></th>${headerRow2}</tr>
+                        </thead>
+                        <tbody>${bodyRows}</tbody>
+                    </table>
+                `;
+            }
+
+            const poolContainer = document.getElementById("classroom-pool-list");
+            if (poolContainer) {
+                if (unassigned.length === 0) {
+                    poolContainer.innerHTML = '<div class="text-xs text-zinc-400 text-center py-6">배정 대기 중인 반이 없습니다.</div>';
+                } else {
+                    poolContainer.innerHTML = unassigned.map(s => {
+                        const color = TEACHER_COLORS[s.teacherName] || '#d4d4d8';
+                        const dragAttr = isAdminLoggedIn ? `draggable="true" ondragstart="handleClassroomBlockDragStart(event,'${s.key}')"` : '';
+                        const timeLabel = s.range ? `${s.range.start}:00 - ${s.range.end}:00 (${s.range.end - s.range.start}시간)` : '시간 인식 불가';
+                        return `
+                            <div ${dragAttr} class="p-2.5 rounded-xl text-xs ${isAdminLoggedIn ? 'cursor-grab active:cursor-grabbing' : ''}" style="background:${color}33; border:1px solid ${color};">
+                                <div class="font-bold text-zinc-800">${s.slot.title}</div>
+                                <div class="text-primary font-semibold text-[11px]">${s.teacherName}T</div>
+                                <div class="text-zinc-500 text-[11px]">${timeLabel} · ${s.count}명</div>
+                            </div>
+                        `;
+                    }).join('');
+                }
+            }
+
+            const countEl = document.getElementById("classroom-pool-count");
+            if (countEl) countEl.innerText = `${unassigned.length}건`;
+        }
+
+        function handleClassroomBlockDragStart(event, key) {
+            if (!isAdminLoggedIn) { event.preventDefault(); return; }
+            event.dataTransfer.setData('text/plain', key);
+            event.dataTransfer.effectAllowed = 'move';
+        }
+
+        function handleClassroomCellDragOver(event) {
+            if (!isAdminLoggedIn) return;
+            event.preventDefault();
+        }
+
+        function handleClassroomCellDrop(event, day, roomId) {
+            event.preventDefault();
+            if (!isAdminLoggedIn) return;
+            const key = event.dataTransfer.getData('text/plain');
+            if (!key) return;
+            assignClassroomSlot(day, key, roomId);
+        }
+
+        function handleClassroomPoolDragOver(event) {
+            if (!isAdminLoggedIn) return;
+            event.preventDefault();
+        }
+
+        function handleClassroomPoolDrop(event) {
+            event.preventDefault();
+            if (!isAdminLoggedIn) return;
+            const key = event.dataTransfer.getData('text/plain');
+            if (!key) return;
+            unassignClassroomSlot(currentClassroomDay, key);
+        }
+
+        function assignClassroomSlot(day, key, roomId) {
+            if (!isAdminLoggedIn) return;
+            if (!classroomAssignments[day]) classroomAssignments[day] = {};
+            const info = getClassroomSlotInfoByKey(day, key);
+            if (!info || !info.range) {
+                alert("이 반은 시간대를 인식할 수 없어 강의실에 배정할 수 없습니다. 반 이름에 시간 표기(예: 오후 2시 - 오후 5시)를 확인해주세요.");
+                return;
+            }
+            const assignments = classroomAssignments[day];
+            const conflict = Object.keys(assignments).some(otherKey => {
+                if (otherKey === key || assignments[otherKey] !== roomId) return false;
+                const otherInfo = getClassroomSlotInfoByKey(day, otherKey);
+                if (!otherInfo || !otherInfo.range) return false;
+                return info.range.start < otherInfo.range.end && otherInfo.range.start < info.range.end;
+            });
+            if (conflict) {
+                alert("이미 해당 시간대에 다른 반이 이 강의실에 배정되어 있습니다.");
+                return;
+            }
+            assignments[key] = roomId;
+            saveDataToSupabase('classroomAssignments', classroomAssignments);
+            renderClassroomGrid(day);
+        }
+
+        function unassignClassroomSlot(day, key) {
+            if (!isAdminLoggedIn) return;
+            if (!classroomAssignments[day]) classroomAssignments[day] = {};
+            delete classroomAssignments[day][key];
+            saveDataToSupabase('classroomAssignments', classroomAssignments);
+            renderClassroomGrid(day);
+        }
+
         function switchTab(tabName) {
             const attBtn = document.getElementById("tab-attendance-btn");
             const mngBtn = document.getElementById("tab-management-btn");
+            const classroomBtn = document.getElementById("tab-classroom-btn");
             const adminResBtn = document.getElementById("tab-admin-reservations-btn");
             
             const attSec = document.getElementById("tab-attendance");
             const mngSec = document.getElementById("tab-management");
+            const classroomSec = document.getElementById("tab-classroom");
             const adminResSec = document.getElementById("tab-admin-reservations");
 
             attBtn.className = "px-4 py-2 rounded-lg font-semibold text-zinc-600 hover:bg-zinc-100 transition";
             mngBtn.className = "px-4 py-2 rounded-lg font-semibold text-zinc-600 hover:bg-zinc-100 transition";
+            if(classroomBtn) classroomBtn.className = "px-4 py-2 rounded-lg font-semibold text-zinc-600 hover:bg-zinc-100 transition";
             if(adminResBtn) adminResBtn.className = "px-4 py-2 rounded-lg font-semibold text-zinc-600 hover:bg-zinc-100 transition";
             
             attSec.classList.add("hidden");
             mngSec.classList.add("hidden");
+            if(classroomSec) classroomSec.classList.add("hidden");
             if(adminResSec) adminResSec.classList.add("hidden");
 
             if (tabName === 'attendance') {
@@ -1927,6 +2245,10 @@
                 mngBtn.className = "px-4 py-2 rounded-lg font-semibold bg-primary text-white transition";
                 mngSec.classList.remove("hidden");
                 renderManagementStudents(getCurrentActiveTeacher());
+            } else if (tabName === 'classroom') {
+                if(classroomBtn) classroomBtn.className = "px-4 py-2 rounded-lg font-semibold bg-primary text-white transition";
+                if(classroomSec) classroomSec.classList.remove("hidden");
+                renderClassroomTab();
             } else if (tabName === 'admin-reservations') {
                 adminResBtn.className = "px-4 py-2 rounded-lg font-semibold bg-primary text-white transition";
                 adminResSec.classList.remove("hidden");
@@ -1983,6 +2305,12 @@
                         delete s.slotId;
                     });
                     data.students = data.students.filter(s => s.slotIds.length > 0);
+                    // 삭제된 반이 강의실에 배정돼 있었다면 배정 정보도 함께 정리
+                    const classroomKey = `${teacherName}::${slotId}`;
+                    if (classroomAssignments[dayKey] && classroomAssignments[dayKey][classroomKey]) {
+                        delete classroomAssignments[dayKey][classroomKey];
+                        saveDataToSupabase('classroomAssignments', classroomAssignments);
+                    }
                     renderFullApp(teacherName);
                     saveDataToSupabase('teacherDataStore', teacherDataStore);
                 }
