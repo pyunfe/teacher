@@ -32,6 +32,8 @@
 </head>
 <body class="bg-[#F7F7F5] text-[#1c1b1b]">
 
+    <div id="sms-toast-container" class="fixed top-4 right-4 z-[100] space-y-2 w-80"></div>
+
     <div id="login-screen" class="flex items-center justify-center min-h-screen bg-[#F7F7F5]">
         <div class="bg-white p-8 rounded-2xl shadow-sm border border-zinc-200 w-96 text-center">
             <h1 class="text-2xl font-bold text-primary mb-2 tracking-tight">국성티처</h1>
@@ -146,7 +148,7 @@
             <section id="tab-management" class="hidden space-y-6">
                 <div class="flex justify-between items-center">
                     <div>
-                        <h2 class="text-xl font-bold text-[#1c1b1b]" id="management-title">원생 관리 및 카카오톡 발송 예약</h2>
+                        <h2 class="text-xl font-bold text-[#1c1b1b]" id="management-title">원생 관리 및 문자 발송 예약</h2>
                         <p class="text-sm text-zinc-500">대상자를 선택하고 발송할 내용을 작성한 뒤 예약 설정을 진행하세요.</p>
                     </div>
                     <div class="space-x-2 flex items-center">
@@ -193,12 +195,13 @@
                     </div>
 
                     <div class="md:col-span-7 bg-white p-6 rounded-2xl shadow-sm border border-zinc-200 space-y-5">
-                        <h3 class="font-bold text-base text-zinc-800 border-b border-zinc-100 pb-2">카카오톡 발송 내용 작성</h3>
+                        <h3 class="font-bold text-base text-zinc-800 border-b border-zinc-100 pb-2">문자 발송 내용 작성</h3>
+                        <div id="sms-api-status-banner" class="hidden text-xs px-3 py-2 rounded-lg bg-amber-50 text-amber-700 border border-amber-200"></div>
                         <div class="space-y-1">
                             <label class="text-xs font-semibold text-zinc-600">발송 메시지 내용</label>
-                            <textarea id="kakao-msg-content" rows="7"
+                            <textarea id="sms-msg-content" rows="7"
                                 class="w-full border border-zinc-200 rounded-xl p-3 focus:outline-none focus:ring-1 focus:ring-primary text-sm resize-none"
-                                placeholder="학부모님/학생에게 전달할 알림톡 내용을 입력하세요..."></textarea>
+                                placeholder="학부모님/학생에게 전달할 문자 내용을 입력하세요..."></textarea>
                         </div>
                         <div class="space-y-1">
                             <label class="text-xs font-semibold text-zinc-600">예약 일시 선택</label>
@@ -207,7 +210,7 @@
                                 <input type="time" id="reserve-time" class="border border-zinc-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary text-zinc-700">
                             </div>
                         </div>
-                        <button onclick="handleKakaoReservation()" class="w-full bg-primary text-white py-3 rounded-xl font-semibold hover:bg-primary-hover transition shadow-sm">
+                        <button onclick="handleSmsReservation()" class="w-full bg-primary text-white py-3 rounded-xl font-semibold hover:bg-primary-hover transition shadow-sm">
                             발송 예약하기
                         </button>
                     </div>
@@ -243,8 +246,8 @@
 
             <section id="tab-admin-reservations" class="hidden space-y-6">
                 <div>
-                    <h2 class="text-xl font-bold text-zinc-800" id="admin-res-page-title">카카오톡 발송 예약 관리</h2>
-                    <p class="text-sm text-zinc-500" id="admin-res-page-desc">신청한 예약 내역을 확인하고 발송 대행 프로그램 연동 상태를 관리합니다.</p>
+                    <h2 class="text-xl font-bold text-zinc-800" id="admin-res-page-title">문자 발송 예약 관리</h2>
+                    <p class="text-sm text-zinc-500" id="admin-res-page-desc">신청한 예약 내역을 확인하고 문자 발송 연동 상태를 관리합니다.</p>
                 </div>
                 <div class="bg-white p-6 rounded-2xl shadow-sm border border-zinc-200">
                     <div id="admin-reservation-list" class="space-y-4"></div>
@@ -519,8 +522,8 @@
                 document.getElementById("user-badge").innerText = "관리자 모드 (전체 권한)";
                 document.getElementById("admin-selector-wrapper").classList.remove("hidden");
                 adminResBtn.classList.remove("hidden");
-                document.getElementById("admin-res-page-title").innerText = "강사별 카카오톡 발송 예약 관리";
-                document.getElementById("admin-res-page-desc").innerText = "강사들이 신청한 예약 내역을 확인하고 발송 대행 프로그램 연동 상태를 관리합니다.";
+                document.getElementById("admin-res-page-title").innerText = "강사별 문자 발송 예약 관리";
+                document.getElementById("admin-res-page-desc").innerText = "강사들이 신청한 예약 내역을 확인하고 문자 발송 연동 상태를 관리합니다.";
                 changeTeacher("통합출석부");
             } else if (teacherMap[inputVal]) {
                 isAdminLoggedIn = false;
@@ -528,8 +531,8 @@
                 document.getElementById("user-badge").innerText = `강사 모드 (${tName}T)`;
                 document.getElementById("admin-selector-wrapper").classList.add("hidden");
                 adminResBtn.classList.remove("hidden");
-                document.getElementById("admin-res-page-title").innerText = "카카오톡 발송 예약 내역";
-                document.getElementById("admin-res-page-desc").innerText = "본인이 신청한 카카오톡 발송 예약 내역을 확인합니다.";
+                document.getElementById("admin-res-page-title").innerText = "문자 발송 예약 내역";
+                document.getElementById("admin-res-page-desc").innerText = "본인이 신청한 문자 발송 예약 내역을 확인합니다.";
                 changeTeacher(tName);
             } else {
                 alert("등록되지 않은 비밀번호입니다.");
@@ -538,11 +541,14 @@
 
             document.getElementById("login-screen").classList.add("hidden");
             document.getElementById("app-screen").classList.remove("hidden");
+            updateSmsApiStatusBanner();
+            startReservationScheduler();
         }
 
         function handleLogout() {
             document.getElementById("login-input").value = "";
             isAdminLoggedIn = false;
+            stopReservationScheduler();
             document.getElementById("app-screen").classList.add("hidden");
             document.getElementById("login-screen").classList.remove("hidden");
         }
@@ -2161,14 +2167,14 @@
             closeStudentModal();
         }
 
-        function handleKakaoReservation() {
+        function handleSmsReservation() {
             const checkboxes = document.querySelectorAll('.recipient-checkbox:checked');
-            const message = document.getElementById("kakao-msg-content").value.trim();
+            const message = document.getElementById("sms-msg-content").value.trim();
             const date = document.getElementById("reserve-date").value;
             const time = document.getElementById("reserve-time").value;
 
             if (checkboxes.length === 0) {
-                alert("알림톡을 보낼 대상(학생/학부모)을 최소 1건 이상 체크해주세요.");
+                alert("문자를 보낼 대상(학생/학부모)을 최소 1건 이상 체크해주세요.");
                 return;
             }
             if (!message) {
@@ -2207,11 +2213,149 @@
             saveDataToSupabase('globalReservations', globalReservations);
 
             alert(`[전송 예약 완료]\n- 대상: ${recipients.length}건 (${recipientSummary})\n- 예약 일시: ${date} ${time}`);
-            document.getElementById("kakao-msg-content").value = "";
+            document.getElementById("sms-msg-content").value = "";
             document.getElementById("reserve-date").value = "";
             document.getElementById("reserve-time").value = "";
             document.querySelectorAll('.recipient-checkbox').forEach(cb => cb.checked = false);
             updateSelectedCount();
+        }
+
+        // ===== 문자(SMS) 발송 API 연동부 =====
+        // 나중에 문자 발송 서비스(예: 알리고 등)의 API를 발급받으면 아래 SMS_API_CONFIG 값만 채우고,
+        // sendSmsViaApi() 안의 실제 호출 부분(표시된 구간)만 그 서비스의 API 스펙에 맞게 교체하면 됩니다.
+        // 그 외의 예약 관리, 자동 발송 체크 로직은 전혀 손댈 필요가 없습니다.
+        var SMS_API_CONFIG = {
+            provider: '',    // 예: 'aligo'
+            apiKey: '',      // 발급받은 API Key
+            userId: '',      // 서비스 계정 아이디 (필요한 경우)
+            sender: '',      // 사전 등록된 발신번호
+            endpoint: ''     // API 요청 URL
+        };
+
+        function isSmsApiConfigured() {
+            return !!(SMS_API_CONFIG.apiKey && SMS_API_CONFIG.sender && SMS_API_CONFIG.endpoint);
+        }
+
+        // 실제 문자 발송을 수행하는 함수. recipients: [{name, type, phone}], message: 문자 내용
+        // 반환값: { success: boolean, reason?: string }
+        async function sendSmsViaApi(recipients, message) {
+            if (!isSmsApiConfigured()) {
+                return { success: false, reason: 'API_NOT_CONFIGURED' };
+            }
+
+            const phones = recipients.map(r => r.phone).filter(Boolean);
+            if (phones.length === 0) {
+                return { success: false, reason: 'NO_PHONE_NUMBER' };
+            }
+
+            try {
+                // ↓↓↓ 실제 문자 발송 API 연동 시 이 부분을 사용하는 서비스의 스펙에 맞게 교체하세요 ↓↓↓
+                // 예시(알리고 SMS API 형태):
+                // const res = await fetch(SMS_API_CONFIG.endpoint, {
+                //     method: 'POST',
+                //     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                //     body: new URLSearchParams({
+                //         key: SMS_API_CONFIG.apiKey,
+                //         user_id: SMS_API_CONFIG.userId,
+                //         sender: SMS_API_CONFIG.sender,
+                //         receiver: phones.join(','),
+                //         msg: message
+                //     })
+                // });
+                // const data = await res.json();
+                // return { success: String(data.result_code) === '1', reason: data.message };
+                // ↑↑↑ 실제 문자 발송 API 연동 시 이 부분을 사용하는 서비스의 스펙에 맞게 교체하세요 ↑↑↑
+
+                return { success: false, reason: 'API_NOT_IMPLEMENTED' };
+            } catch (err) {
+                console.error("문자 발송 API 호출 오류:", err);
+                return { success: false, reason: 'API_ERROR' };
+            }
+        }
+
+        function updateSmsApiStatusBanner() {
+            const banner = document.getElementById("sms-api-status-banner");
+            if (!banner) return;
+            if (isSmsApiConfigured()) {
+                banner.classList.add("hidden");
+            } else {
+                banner.classList.remove("hidden");
+                banner.innerText = "⚠ 문자 발송 API가 아직 연동되지 않았습니다. 예약 시간이 되면 자동으로 감지하지만, 실제 문자는 API 연동 후부터 자동 발송됩니다. (그 전까지는 예약 목록에서 수동으로 '발송 완료 처리'하세요)";
+            }
+        }
+
+        // ===== 예약 발송 자동 체크 스케줄러 =====
+        var reservationCheckTimer = null;
+
+        function startReservationScheduler() {
+            if (reservationCheckTimer) return;
+            checkAndSendDueReservations();
+            reservationCheckTimer = setInterval(checkAndSendDueReservations, 30000);
+        }
+
+        function stopReservationScheduler() {
+            if (reservationCheckTimer) {
+                clearInterval(reservationCheckTimer);
+                reservationCheckTimer = null;
+            }
+        }
+
+        // 예약된 시각이 지난 '대기중' 건을 찾아 문자 발송을 시도하고, 성공하면 자동으로 '발송완료'로 전환한다.
+        async function checkAndSendDueReservations() {
+            if (!globalReservations || globalReservations.length === 0) return;
+            const now = new Date();
+            let changed = false;
+
+            for (const res of globalReservations) {
+                if (res.status !== '대기중') continue;
+
+                const dueAt = new Date((res.reserveAt || '').replace(' ', 'T'));
+                if (isNaN(dueAt.getTime()) || dueAt.getTime() > now.getTime()) continue;
+
+                if (!isSmsApiConfigured()) {
+                    // API 미연동 상태: 시간이 됐음을 인지시키되, 실제 발송/상태 전환은 API 연동 후로 미룬다.
+                    if (!res.dueNotified) {
+                        res.dueNotified = true;
+                        changed = true;
+                        showSmsToast(`⏰ [${res.teacher}T] 예약 시각(${res.reserveAt})이 되었습니다. 문자 API가 연동되면 자동 발송됩니다.`, 'warn');
+                    }
+                    continue;
+                }
+
+                const result = await sendSmsViaApi(res.recipients || [], res.message);
+
+                if (result.success) {
+                    res.status = '발송완료';
+                    res.sentAt = `${getFormattedDate(new Date())} ${now.toTimeString().slice(0, 5)}`;
+                    showSmsToast(`✅ [${res.teacher}T] 문자 발송이 완료되어 '발송완료'로 자동 전환되었습니다. (예약: ${res.reserveAt})`, 'success');
+                } else {
+                    res.lastError = result.reason;
+                    showSmsToast(`❌ [${res.teacher}T] 문자 발송에 실패했습니다. (사유: ${result.reason}) 잠시 후 다시 시도합니다.`, 'error');
+                }
+                changed = true;
+            }
+
+            if (changed) {
+                renderAdminReservations();
+                saveDataToSupabase('globalReservations', globalReservations);
+            }
+        }
+
+        function showSmsToast(text, kind) {
+            const container = document.getElementById("sms-toast-container");
+            if (!container) return;
+            const colorMap = {
+                success: 'bg-emerald-600',
+                warn: 'bg-amber-500',
+                error: 'bg-rose-600'
+            };
+            const toast = document.createElement("div");
+            toast.className = `${colorMap[kind] || 'bg-zinc-800'} text-white text-sm px-4 py-3 rounded-xl shadow-lg`;
+            toast.innerText = text;
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.remove();
+            }, 8000);
         }
 
         function renderAdminReservations() {
@@ -2236,12 +2380,18 @@
                     : (res.students ? res.students.join(', ') : '정보 없음');
                 const targetCountLabel = res.recipients ? res.recipients.length : res.studentCount;
 
+                const isCompleted = (res.status === '전송완료' || res.status === '발송완료');
+
                 let adminActionButtons = '';
-                if (isAdminLoggedIn) {
+                if (isAdminLoggedIn && !isCompleted) {
                     adminActionButtons = `
-                        <button onclick="updateReservationStatus(${res.id}, '전송완료')" class="px-3 py-1 bg-zinc-800 text-white rounded text-xs font-semibold hover:bg-zinc-900 transition">전송 완료로 처리</button>
+                        <button onclick="updateReservationStatus(${res.id}, '발송완료')" class="px-3 py-1 bg-zinc-800 text-white rounded text-xs font-semibold hover:bg-zinc-900 transition">발송 완료로 처리</button>
                     `;
                 }
+
+                const statusBadgeClass = isCompleted ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800';
+                const sentAtLabel = res.sentAt ? `<span class="text-[11px] text-emerald-600">(발송: ${res.sentAt})</span>` : '';
+                const errorLabel = (!isCompleted && res.lastError) ? `<div class="text-[11px] text-rose-500">최근 발송 시도 실패: ${res.lastError}</div>` : '';
 
                 const item = document.createElement("div");
                 item.className = "p-4 rounded-xl border border-zinc-200 bg-zinc-50/50 space-y-2";
@@ -2251,10 +2401,12 @@
                             <span class="px-2.5 py-1 bg-primary/10 text-primary rounded-lg text-xs font-bold">${res.teacher}T</span>
                             <span class="text-xs text-zinc-600">대상: <b>${targetCountLabel}건</b> (<span class="text-zinc-500">${studentNamesStr}</span>)</span>
                             <span class="text-xs text-zinc-400">| ${res.reserveAt}</span>
+                            ${sentAtLabel}
                         </div>
-                        <span class="px-2 py-0.5 text-xs rounded font-semibold ${res.status === '전송완료' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}">${res.status}</span>
+                        <span class="px-2 py-0.5 text-xs rounded font-semibold ${statusBadgeClass}">${res.status}</span>
                     </div>
                     <div class="p-3 bg-white rounded-lg border border-zinc-200 text-xs text-zinc-700 whitespace-pre-wrap">${res.message}</div>
+                    ${errorLabel}
                     <div class="flex justify-end space-x-2 pt-1">
                         ${adminActionButtons}
                         <button onclick="deleteReservation(${res.id})" class="px-3 py-1 bg-rose-100 text-rose-700 rounded text-xs font-semibold hover:bg-rose-200 transition">예약 취소</button>
