@@ -1900,14 +1900,18 @@
                 const item = document.createElement("div");
                 item.className = "p-4 rounded-xl border border-zinc-200 bg-zinc-50/50 space-y-2";
                 item.innerHTML = `
-                    <div class="flex justify-between items-center">
-                        <div class="flex items-center space-x-2">
+                    <div class="space-y-1.5">
+                        <div>
                             <span class="px-2.5 py-1 bg-primary/10 text-primary rounded-lg text-xs font-bold">${res.teacher}T</span>
-                            <span class="text-xs text-zinc-600">대상: <b>${targetCountLabel}건</b> (<span class="text-zinc-500">${studentNamesStr}</span>)</span>
-                            <span class="text-xs text-zinc-400">| ${res.reserveAt}</span>
-                            ${sentAtLabel}
                         </div>
-                        <span class="px-2 py-0.5 text-xs rounded font-semibold ${statusBadgeClass}">${res.status}</span>
+                        <div class="text-xs text-zinc-600 leading-relaxed">대상: <b>${targetCountLabel}건</b> (<span class="text-zinc-500">${studentNamesStr}</span>)</div>
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center space-x-2">
+                                <span class="text-xs text-zinc-400">${res.reserveAt}</span>
+                                ${sentAtLabel}
+                            </div>
+                            <span class="px-2 py-0.5 text-xs rounded font-semibold ${statusBadgeClass}">${res.status}</span>
+                        </div>
                     </div>
                     <div class="p-3 bg-white rounded-lg border border-zinc-200 text-xs text-zinc-700 whitespace-pre-wrap">${res.message}</div>
                     ${errorLabel}
