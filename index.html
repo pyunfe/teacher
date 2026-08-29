@@ -308,6 +308,7 @@
                 <div id="student-modal-withdraw-section" class="hidden pt-3 border-t border-zinc-100 space-y-2">
                     <div class="flex items-center space-x-2">
                         <button type="button" id="student-modal-delete-btn" onclick="handleDeleteFromModal()" class="text-xs bg-rose-50 hover:bg-rose-100 text-rose-600 px-3 py-1.5 rounded-lg font-semibold transition">삭제</button>
+                        <button type="button" id="student-modal-remove-forever-btn" onclick="handleRemoveForeverFromModal()" class="text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-500 px-3 py-1.5 rounded-lg font-semibold transition">완전 제거</button>
                     </div>
                 </div>
             </div>
@@ -1282,6 +1283,7 @@
                     </label>
                     <button onclick="openEditStudentModal('${teacherName}', ${idx})" class="text-[11px] bg-zinc-200 hover:bg-zinc-300 text-zinc-700 px-2.5 py-1 rounded font-semibold transition">수정</button>
                     <button onclick="handleDeleteStudent('${teacherName}', ${idx})" class="text-[11px] bg-rose-50 hover:bg-rose-100 text-rose-600 px-2.5 py-1 rounded font-semibold transition">삭제</button>
+                    <button onclick="handleRemoveForeverStudent('${teacherName}', ${idx})" class="text-[11px] bg-zinc-100 hover:bg-zinc-200 text-zinc-500 px-2.5 py-1 rounded font-semibold transition">완전 제거</button>
                 </div>
             `;
             return item;
@@ -1541,6 +1543,67 @@
             } else {
                 renderFullApp(teacherName);
             }
+        }
+
+        // 완전 제거: '삭제'와 달리 출석 기록까지 포함해서 Supabase에서 흔적도 없이 지운다. 되돌릴 수 없음.
+        // (자동등록 스크립트 테스트 중 잘못 등록된 학생을 지우고 다시 시도할 때 등 사용)
+        function removeStudentPermanently(teacherName, index) {
+            const data = teacherDataStore[teacherName];
+            if (!data) return null;
+            const student = data.students[index];
+            if (!student) return null;
+
+            data.students.splice(index, 1);
+
+            Object.keys(attendanceRecords).forEach(weekKey => {
+                const weekRecords = attendanceRecords[weekKey];
+                if (!weekRecords) return;
+                Object.keys(weekRecords).forEach(key => {
+                    if (key === student.name || key.startsWith(`${student.name}__`)) {
+                        delete weekRecords[key];
+                    }
+                });
+            });
+
+            Object.keys(weeklyOverrides).forEach(weekKey => {
+                const wk = weeklyOverrides[weekKey];
+                if (wk && wk[teacherName] && wk[teacherName][student.name]) {
+                    delete wk[teacherName][student.name];
+                }
+            });
+
+            saveDataToSupabase('teacherDataStore', teacherDataStore);
+            saveDataToSupabase('attendanceRecords', attendanceRecords);
+            saveDataToSupabase('weeklyOverrides', weeklyOverrides);
+
+            return student;
+        }
+
+        function handleRemoveForeverStudent(teacherName, index) {
+            const data = teacherDataStore[teacherName];
+            if (!data) return;
+            const student = data.students[index];
+            if (!student) return;
+
+            if (!confirm(`${student.name} 학생을 완전히 제거하시겠습니까?\n\n'삭제'와 달리 출석 기록까지 전부 사라지며 되돌릴 수 없습니다.`)) return;
+
+            removeStudentPermanently(teacherName, index);
+            refreshAfterStudentListChange(teacherName);
+        }
+
+        function handleRemoveForeverFromModal() {
+            const teacherName = studentModalTeacherName;
+            const index = studentModalEditIndex;
+            const data = teacherDataStore[teacherName];
+            if (!data) return;
+            const student = data.students[index];
+            if (!student) return;
+
+            if (!confirm(`${student.name} 학생을 완전히 제거하시겠습니까?\n\n'삭제'와 달리 출석 기록까지 전부 사라지며 되돌릴 수 없습니다.`)) return;
+
+            removeStudentPermanently(teacherName, index);
+            refreshAfterStudentListChange(teacherName);
+            closeStudentModal();
         }
 
         // 원생 관리 목록의 '삭제' 버튼: 원생 목록에서는 즉시 사라지고,
