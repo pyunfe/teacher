@@ -100,6 +100,8 @@
                         <h2 class="text-xl font-bold text-zinc-800" id="attendance-title">출석부</h2>
                     </div>
                     <div class="flex items-center space-x-3">
+                        <div id="integrated-teacher-filter" class="hidden items-center space-x-1 bg-zinc-50 border border-zinc-200 rounded-xl p-1">
+                        </div>
                         <div class="flex items-center space-x-2">
                             <label class="text-xs font-semibold text-zinc-600">학생 검색:</label>
                             <input type="text" id="attendance-search-input" oninput="handleAttendanceSearch(this.value)" placeholder="이름 검색..." class="border border-zinc-300 rounded-xl px-3 py-1.5 text-sm bg-zinc-50 focus:outline-none focus:ring-1 focus:ring-primary w-32">
@@ -353,6 +355,18 @@
             "김준영", "박신언", "윤태민",
             "고광준", "이영찬", "오세현"
         ];
+
+        // 통합 출석부 전용 강사 그룹 필터 (실시간 동기화로 인해 전체 목록이 자주 다시 그려지면서
+        // 가로 스크롤 위치가 리셋되는 문제를 완화하기 위해, 보고 싶은 그룹만 좁혀서 볼 수 있게 함)
+        const INTEGRATED_TEACHER_GROUPS = [
+            { key: "all", label: "전체", teachers: null },
+            { key: "hwang", label: "황성웅", teachers: ["황성웅"] },
+            { key: "middle", label: "중등부", teachers: ["정다운", "김신형", "문지현"] },
+            { key: "g1", label: "고1", teachers: ["강윤지", "이현영", "김명일"] },
+            { key: "g2", label: "고2", teachers: ["김준영", "박신언", "윤태민"] },
+            { key: "g3", label: "고3", teachers: ["고광준", "이영찬", "오세현"] }
+        ];
+        var integratedTeacherFilterKey = "all";
 
         // ===== 강의실 배정표 =====
         // 왼쪽에서 오른쪽으로 8층 -> 7층 -> 6층 -> 5층 순서로 배치
@@ -949,6 +963,12 @@
             document.getElementById("attendance-title").innerText = `${targetValue}T 출석부`;
             document.getElementById("slot-add-btn-wrapper").classList.remove("hidden");
 
+            const integratedFilterBar = document.getElementById("integrated-teacher-filter");
+            if (integratedFilterBar) {
+                integratedFilterBar.classList.add("hidden");
+                integratedFilterBar.classList.remove("flex");
+            }
+
             if(document.getElementById("teacher-select")) {
                 document.getElementById("teacher-select").value = targetValue;
             }
@@ -1068,15 +1088,54 @@
             saveDataToSupabase('attendanceRecords', attendanceRecords);
         }
 
+        function renderIntegratedFilterBar() {
+            const wrapper = document.getElementById("integrated-teacher-filter");
+            if (!wrapper) return;
+            wrapper.innerHTML = INTEGRATED_TEACHER_GROUPS.map(g => {
+                const active = g.key === integratedTeacherFilterKey;
+                const cls = active
+                    ? "bg-primary text-white font-bold"
+                    : "bg-white text-zinc-600 hover:bg-zinc-100 font-semibold";
+                return `<button onclick="setIntegratedTeacherFilter('${g.key}')" class="px-3 py-1.5 text-xs rounded-lg transition ${cls}">${g.label}</button>`;
+            }).join("");
+        }
+
+        function setIntegratedTeacherFilter(groupKey) {
+            integratedTeacherFilterKey = groupKey;
+            renderIntegratedFilterBar();
+            renderIntegratedTimetable();
+        }
+
+        function getIntegratedFilteredTeacherNames() {
+            const group = INTEGRATED_TEACHER_GROUPS.find(g => g.key === integratedTeacherFilterKey);
+            if (!group || !group.teachers) return orderedTeacherNames;
+            return orderedTeacherNames.filter(t => group.teachers.includes(t));
+        }
+
         function renderIntegratedTimetable() {
             updateSectionDateLabels();
+
+            const filterWrapper = document.getElementById("integrated-teacher-filter");
+            if (filterWrapper) {
+                filterWrapper.classList.remove("hidden");
+                filterWrapper.classList.add("flex");
+                if (!filterWrapper.innerHTML.trim()) renderIntegratedFilterBar();
+            }
+
+            const filteredTeacherNames = getIntegratedFilteredTeacherNames();
+
             ['friday', 'saturday', 'sunday'].forEach(day => {
                 const rowContainer = document.getElementById(`row-${day}`);
+
+                // 실시간 동기화로 다시 그려질 때 가로 스크롤 위치가 처음으로 리셋되지 않도록 기존 스크롤 위치를 기억해둠
+                const prevScrollEl = rowContainer.querySelector('.horizontal-scroll-container');
+                const prevScrollLeft = prevScrollEl ? prevScrollEl.scrollLeft : 0;
+
                 rowContainer.innerHTML = "";
 
                 // 해당 요일에 시간대가 있는 강사만 컬럼으로 구성
                 const teacherColumns = [];
-                orderedTeacherNames.forEach(tName => {
+                filteredTeacherNames.forEach(tName => {
                     if (!teacherDataStore[tName]) initDefaultTeacherData(tName);
                     const tData = teacherDataStore[tName];
                     const daySlots = getSortedSlots(tData.slots[day] || []);
@@ -1152,6 +1211,9 @@
                         </div>
                     </div>
                 `;
+
+                const newScrollEl = rowContainer.querySelector('.horizontal-scroll-container');
+                if (newScrollEl && prevScrollLeft) newScrollEl.scrollLeft = prevScrollLeft;
             });
 
             applyAttendanceSearchFilter();
