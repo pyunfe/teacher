@@ -490,7 +490,84 @@
         window.addEventListener("DOMContentLoaded", async () => {
             initWeeks();
             await loadDataFromSupabase();
+            setupRealtimeSync();
         });
+
+        // ===== 실시간 동기화 (다른 브라우저의 저장 내용을 새로고침 없이 반영) =====
+        var pendingRealtimeRefresh = false;
+
+        function setupRealtimeSync() {
+            if (!supabaseClient) return;
+            supabaseClient
+                .channel('app_data_sync')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'app_data' }, handleRealtimeAppDataChange)
+                .subscribe();
+        }
+
+        function handleRealtimeAppDataChange(payload) {
+            const row = (payload.new && Object.keys(payload.new).length) ? payload.new : payload.old;
+            if (!row || !row.id) return;
+
+            if (row.id === 'teacherDataStore') teacherDataStore = row.data || {};
+            else if (row.id === 'attendanceRecords') attendanceRecords = row.data || {};
+            else if (row.id === 'globalReservations') globalReservations = row.data || [];
+            else if (row.id === 'weeklyOverrides') weeklyOverrides = row.data || {};
+            else if (row.id === 'classroomAssignments') {
+                classroomAssignments = {
+                    friday: (row.data && row.data.friday) || {},
+                    saturday: (row.data && row.data.saturday) || {},
+                    sunday: (row.data && row.data.sunday) || {}
+                };
+            } else {
+                return;
+            }
+
+            refreshCurrentViewSafely();
+        }
+
+        // 비고 등 텍스트 입력 중에는 커서가 튀지 않도록 즉시 다시 그리지 않고, 입력을 마친(blur) 후에 반영
+        function isTypingInTextField() {
+            const el = document.activeElement;
+            if (!el) return false;
+            const tag = el.tagName;
+            return (tag === 'INPUT' && (el.type === 'text' || el.type === 'date' || el.type === 'time')) || tag === 'TEXTAREA';
+        }
+
+        function refreshCurrentViewSafely() {
+            if (isTypingInTextField()) {
+                pendingRealtimeRefresh = true;
+                return;
+            }
+            renderCurrentActiveView();
+        }
+
+        document.addEventListener('focusout', () => {
+            if (pendingRealtimeRefresh) {
+                pendingRealtimeRefresh = false;
+                setTimeout(renderCurrentActiveView, 0);
+            }
+        }, true);
+
+        function renderCurrentActiveView() {
+            if (document.getElementById("app-screen").classList.contains('hidden')) return;
+
+            const attSec = document.getElementById("tab-attendance");
+            const mngSec = document.getElementById("tab-management");
+            const classroomSec = document.getElementById("tab-classroom");
+            const adminResSec = document.getElementById("tab-admin-reservations");
+
+            if (attSec && !attSec.classList.contains('hidden')) {
+                const currentVal = getCurrentActiveTeacher();
+                if (currentVal === "통합출석부") renderIntegratedTimetable();
+                else renderTimetableAndSlots(currentVal);
+            } else if (mngSec && !mngSec.classList.contains('hidden')) {
+                renderManagementStudents(getCurrentActiveTeacher());
+            } else if (classroomSec && !classroomSec.classList.contains('hidden')) {
+                renderClassroomTab();
+            } else if (adminResSec && !adminResSec.classList.contains('hidden')) {
+                renderAdminReservations();
+            }
+        }
 
         async function handleLogin() {
             const inputVal = document.getElementById("login-input").value.trim();
