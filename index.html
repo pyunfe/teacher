@@ -602,6 +602,10 @@
                 adminResBtn.classList.remove("hidden");
                 document.getElementById("admin-res-page-title").innerText = "강사별 문자 발송 예약 관리";
                 document.getElementById("admin-res-page-desc").innerText = "강사들이 신청한 예약 내역을 확인하고 문자 발송 연동 상태를 관리합니다.";
+                ["friday", "saturday", "sunday"].forEach(d => {
+                    const btn = document.getElementById(`btn-add-${d}`);
+                    if (btn) btn.classList.remove("hidden");
+                });
                 changeTeacher("통합출석부");
             } else if (teacherMap[inputVal]) {
                 isAdminLoggedIn = false;
@@ -611,6 +615,10 @@
                 adminResBtn.classList.remove("hidden");
                 document.getElementById("admin-res-page-title").innerText = "문자 발송 예약 내역";
                 document.getElementById("admin-res-page-desc").innerText = "본인이 신청한 문자 발송 예약 내역을 확인합니다.";
+                ["friday", "saturday", "sunday"].forEach(d => {
+                    const btn = document.getElementById(`btn-add-${d}`);
+                    if (btn) btn.classList.add("hidden");
+                });
                 changeTeacher(tName);
             } else {
                 alert("등록되지 않은 비밀번호입니다.");
@@ -1272,7 +1280,7 @@
                         <div class="w-[385px] shrink-0 bg-zinc-50/50 p-4 rounded-xl border border-zinc-200 self-start">
                             <div class="flex justify-between items-center mb-3">
                                 <span class="text-xs font-bold text-zinc-700 truncate">${slot.title} <span class="text-zinc-400 font-semibold">(${slotStudents.length}명)</span></span>
-                                <button onclick="editSlotBox('${teacherName}', '${day}', '${slot.id}')" class="text-[10px] text-zinc-500 hover:text-primary font-semibold shrink-0 ml-2 bg-white px-2 py-1 rounded border border-zinc-200">수정 / 삭제</button>
+                                ${isAdminLoggedIn ? `<button onclick="editSlotBox('${teacherName}', '${day}', '${slot.id}')" class="text-[10px] text-zinc-500 hover:text-primary font-semibold shrink-0 ml-2 bg-white px-2 py-1 rounded border border-zinc-200">수정 / 삭제</button>` : ''}
                             </div>
                             <div class="space-y-1.5">${studentsHtml}</div>
                         </div>
@@ -1420,8 +1428,8 @@
                         <input type="checkbox" data-name="${s.name}" data-type="parent" data-phone="${s.parentPhone || ''}" onchange="updateSelectedCount()" ${!s.parentPhone ? 'disabled' : ''} class="recipient-checkbox w-3.5 h-3.5 text-primary rounded border-zinc-300 focus:ring-primary">
                         <span>학부모</span>
                     </label>
-                    <button onclick="openEditStudentModal('${teacherName}', ${idx})" class="text-[11px] bg-zinc-200 hover:bg-zinc-300 text-zinc-700 px-2.5 py-1 rounded font-semibold transition">수정</button>
-                    <button onclick="handleDeleteStudent('${teacherName}', ${idx})" class="text-[11px] bg-rose-50 hover:bg-rose-100 text-rose-600 px-2.5 py-1 rounded font-semibold transition">삭제</button>
+                    ${isAdminLoggedIn ? `<button onclick="openEditStudentModal('${teacherName}', ${idx})" class="text-[11px] bg-zinc-200 hover:bg-zinc-300 text-zinc-700 px-2.5 py-1 rounded font-semibold transition">수정</button>` : ''}
+                    ${isAdminLoggedIn ? `<button onclick="handleDeleteStudent('${teacherName}', ${idx})" class="text-[11px] bg-rose-50 hover:bg-rose-100 text-rose-600 px-2.5 py-1 rounded font-semibold transition">삭제</button>` : ''}
                 </div>
             `;
             return item;
@@ -1495,6 +1503,7 @@
         }
 
         function openEditStudentModal(teacherName, index) {
+            if (!isAdminLoggedIn) return;
             openStudentModal('edit', teacherName, index);
         }
 
@@ -1735,6 +1744,7 @@
         // 원생 관리 목록의 '삭제' 버튼: 원생 목록에서는 즉시 사라지고,
         // 다음 주차 출석부부터 이름이 빠진다 (그 전 출석 기록은 남아있음). 되돌릴 수 없음.
         function handleDeleteStudent(teacherName, index) {
+            if (!isAdminLoggedIn) return;
             const data = teacherDataStore[teacherName];
             if (!data) return;
             const student = data.students[index];
@@ -2370,6 +2380,7 @@
         }
 
         function addSlotBox(dayKey) {
+            if (!isAdminLoggedIn) return;
             const currentTeacher = getCurrentActiveTeacher();
             if (currentTeacher === "통합출석부") return;
 
@@ -2385,6 +2396,7 @@
         }
 
         function editSlotBox(teacherName, dayKey, slotId) {
+            if (!isAdminLoggedIn) return;
             const data = teacherDataStore[teacherName];
             const slot = data.slots[dayKey].find(s => s.id === slotId);
             if (!slot) return;
