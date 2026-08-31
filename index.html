@@ -321,6 +321,36 @@
         </div>
     </div>
 
+    <div id="slot-modal" class="hidden fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onclick="if(event.target===this) closeSlotModal()">
+        <div class="bg-white rounded-2xl shadow-lg w-full max-w-md flex flex-col">
+            <div class="flex justify-between items-center p-4 border-b border-zinc-100">
+                <h3 class="font-bold text-base text-zinc-800" id="slot-modal-title">시간대 박스 추가</h3>
+                <button onclick="closeSlotModal()" class="text-zinc-400 hover:text-zinc-700 text-xl leading-none">&times;</button>
+            </div>
+            <div class="p-5 space-y-4">
+                <div id="slot-modal-day-section" class="space-y-1">
+                    <label class="text-xs font-semibold text-zinc-600">요일 *</label>
+                    <select id="slot-modal-day-select" class="w-full border border-zinc-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary bg-white">
+                        <option value="friday">금요일</option>
+                        <option value="saturday">토요일</option>
+                        <option value="sunday">일요일</option>
+                    </select>
+                </div>
+                <div class="space-y-1">
+                    <label class="text-xs font-semibold text-zinc-600">반 이름 및 시간대 *</label>
+                    <input type="text" id="slot-modal-title-input" placeholder="예: 청담중1 (오후 2시 - 오후 5시)" class="w-full border border-zinc-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
+                </div>
+                <div id="slot-modal-delete-section" class="hidden pt-3 border-t border-zinc-100">
+                    <button type="button" onclick="deleteSlotModalItem()" class="text-xs bg-rose-50 hover:bg-rose-100 text-rose-600 px-3 py-1.5 rounded-lg font-semibold transition">박스 삭제</button>
+                </div>
+            </div>
+            <div class="flex justify-end space-x-2 p-4 border-t border-zinc-100">
+                <button onclick="closeSlotModal()" class="px-4 py-2 rounded-lg text-sm font-semibold text-zinc-600 hover:bg-zinc-100 transition">취소</button>
+                <button onclick="saveSlotModal()" class="px-4 py-2 rounded-lg text-sm font-semibold bg-primary text-white hover:bg-primary-hover transition">저장</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         var SUPABASE_URL = 'https://haaiwbjdlqwrfrvsurxi.supabase.co';
         var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhhYWl3YmpkbHF3cmZydnN1cnhpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY1MTQ1NjQsImV4cCI6MjEwMjA5MDU2NH0.hiMuLbrgkF2W_-PR5dfwmqI2TAOLi3yJv25_iCMovFE';
@@ -2369,30 +2399,25 @@
         }
 
         function addSlotBoxPrompt() {
+            if (!isAdminLoggedIn) return;
             const currentTeacher = getCurrentActiveTeacher();
             if (currentTeacher === "통합출석부") return;
 
-            const dayPrompt = prompt("어느 요일에 추가하시겠습니까? (금요일, 토요일, 일요일 중 입력):");
-            if (!dayPrompt) return;
-            let dayKey = dayPrompt.includes("금") ? "friday" : dayPrompt.includes("토") ? "saturday" : dayPrompt.includes("일") ? "sunday" : "";
-            if (!dayKey) { alert("요일을 정확히 입력해주세요."); return; }
-            addSlotBox(dayKey);
+            openSlotModal('add', currentTeacher, 'friday', null);
         }
+
+        // ===== 시간대 박스 추가/수정/삭제 모달 =====
+        var slotModalMode = null; // 'add' | 'edit'
+        var slotModalTeacherName = null;
+        var slotModalDayKey = null;
+        var slotModalSlotId = null;
 
         function addSlotBox(dayKey) {
             if (!isAdminLoggedIn) return;
             const currentTeacher = getCurrentActiveTeacher();
             if (currentTeacher === "통합출석부") return;
 
-            const timeLabel = prompt("추가할 반 이름 및 시간대를 입력하세요 (예: 청담중1 (오후 2시 - 오후 5시)):");
-            if (!timeLabel) return;
-
-            if (!teacherDataStore[currentTeacher]) initDefaultTeacherData(currentTeacher);
-
-            const newId = 'slot-' + dayKey + '-' + Date.now();
-            teacherDataStore[currentTeacher].slots[dayKey].push({ id: newId, title: timeLabel });
-            renderFullApp(currentTeacher);
-            saveDataToSupabase('teacherDataStore', teacherDataStore);
+            openSlotModal('add', currentTeacher, dayKey, null);
         }
 
         function editSlotBox(teacherName, dayKey, slotId) {
@@ -2401,34 +2426,86 @@
             const slot = data.slots[dayKey].find(s => s.id === slotId);
             if (!slot) return;
 
-            const action = prompt(`[${slot.title}] 시간대 박스 관리\n원하시는 작업을 입력하세요:\n1. 이름 수정\n2. 박스 삭제`, "1");
+            openSlotModal('edit', teacherName, dayKey, slotId);
+        }
 
-            if (action === "1" || action === "이름 수정") {
-                const newTitle = prompt("변경할 반 이름 및 시간대를 입력하세요:", slot.title);
-                if (newTitle && newTitle.trim() !== "") {
-                    slot.title = newTitle.trim();
-                    renderFullApp(teacherName);
-                    saveDataToSupabase('teacherDataStore', teacherDataStore);
-                }
-            } else if (action === "2" || action === "박스 삭제") {
-                if (confirm(`정말 "${slot.title}" 박스를 삭제하시겠습니까?\n이 시간대에만 등록된 학생은 목록에서 함께 퇴장 되고, 다른 시간표에는 등록된 학생은 그 시간표에 그대로 남습니다.`)) {
-                    data.slots[dayKey] = data.slots[dayKey].filter(s => s.id !== slotId);
-                    data.students.forEach(s => {
-                        const ids = getStudentSlotIds(s).filter(id => id !== slotId);
-                        s.slotIds = ids;
-                        delete s.slotId;
-                    });
-                    data.students = data.students.filter(s => s.slotIds.length > 0);
-                    // 삭제된 반이 강의실에 배정되어 있었다면 배정 정보도 함께 정리
-                    const classroomKey = `${teacherName}::${slotId}`;
-                    if (classroomAssignments[dayKey] && classroomAssignments[dayKey][classroomKey]) {
-                        delete classroomAssignments[dayKey][classroomKey];
-                        saveDataToSupabase('classroomAssignments', classroomAssignments);
-                    }
-                    renderFullApp(teacherName);
-                    saveDataToSupabase('teacherDataStore', teacherDataStore);
-                }
+        function openSlotModal(mode, teacherName, dayKey, slotId) {
+            slotModalMode = mode;
+            slotModalTeacherName = teacherName;
+            slotModalDayKey = dayKey;
+            slotModalSlotId = slotId;
+
+            const slot = (mode === 'edit') ? teacherDataStore[teacherName].slots[dayKey].find(s => s.id === slotId) : null;
+
+            document.getElementById("slot-modal-title").innerText = mode === 'edit' ? "시간대 박스 수정" : "시간대 박스 추가";
+            document.getElementById("slot-modal-title-input").value = slot ? slot.title : "";
+            document.getElementById("slot-modal-delete-section").classList.toggle("hidden", mode !== 'edit');
+            document.getElementById("slot-modal-day-section").classList.toggle("hidden", mode !== 'add');
+            document.getElementById("slot-modal-day-select").value = dayKey || "friday";
+
+            document.getElementById("slot-modal").classList.remove("hidden");
+            document.getElementById("slot-modal-title-input").focus();
+        }
+
+        function closeSlotModal() {
+            document.getElementById("slot-modal").classList.add("hidden");
+            slotModalMode = null;
+            slotModalTeacherName = null;
+            slotModalDayKey = null;
+            slotModalSlotId = null;
+        }
+
+        function saveSlotModal() {
+            const teacherName = slotModalTeacherName;
+            const dayKey = slotModalMode === 'add' ? document.getElementById("slot-modal-day-select").value : slotModalDayKey;
+            const title = document.getElementById("slot-modal-title-input").value.trim();
+            if (!title) {
+                alert("반 이름 및 시간대를 입력해주세요.");
+                return;
             }
+
+            if (slotModalMode === 'add') {
+                if (!teacherDataStore[teacherName]) initDefaultTeacherData(teacherName);
+                const newId = 'slot-' + dayKey + '-' + Date.now();
+                teacherDataStore[teacherName].slots[dayKey].push({ id: newId, title: title });
+            } else if (slotModalMode === 'edit') {
+                const data = teacherDataStore[teacherName];
+                const slot = data.slots[dayKey].find(s => s.id === slotModalSlotId);
+                if (!slot) return;
+                slot.title = title;
+            }
+
+            renderFullApp(teacherName);
+            saveDataToSupabase('teacherDataStore', teacherDataStore);
+            closeSlotModal();
+        }
+
+        function deleteSlotModalItem() {
+            const teacherName = slotModalTeacherName;
+            const dayKey = slotModalDayKey;
+            const slotId = slotModalSlotId;
+            const data = teacherDataStore[teacherName];
+            const slot = data.slots[dayKey].find(s => s.id === slotId);
+            if (!slot) return;
+
+            if (!confirm(`정말 "${slot.title}" 박스를 삭제하시겠습니까?\n이 시간대에만 등록된 학생은 목록에서 함께 퇴장 되고, 다른 시간표에는 등록된 학생은 그 시간표에 그대로 남습니다.`)) return;
+
+            data.slots[dayKey] = data.slots[dayKey].filter(s => s.id !== slotId);
+            data.students.forEach(s => {
+                const ids = getStudentSlotIds(s).filter(id => id !== slotId);
+                s.slotIds = ids;
+                delete s.slotId;
+            });
+            data.students = data.students.filter(s => s.slotIds.length > 0);
+            // 삭제된 반이 강의실에 배정되어 있었다면 배정 정보도 함께 정리
+            const classroomKey = `${teacherName}::${slotId}`;
+            if (classroomAssignments[dayKey] && classroomAssignments[dayKey][classroomKey]) {
+                delete classroomAssignments[dayKey][classroomKey];
+                saveDataToSupabase('classroomAssignments', classroomAssignments);
+            }
+            renderFullApp(teacherName);
+            saveDataToSupabase('teacherDataStore', teacherDataStore);
+            closeSlotModal();
         }
     </script>
 </body>
