@@ -138,7 +138,7 @@
                         <div class="flex justify-between items-center mb-4 pb-2 border-b border-zinc-100">
                             <h3 class="text-primary font-extrabold text-lg" id="label-friday">금요일</h3>
                             <div class="flex items-center gap-2">
-                                <button id="btn-move-friday" onclick="toggleMoveSelectionMode()" class="text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-700 px-3 py-1.5 rounded-lg font-semibold transition">시간표 이동</button>
+                                <button id="btn-move-friday" onclick="toggleMoveSelectionMode('friday')" class="text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-700 px-3 py-1.5 rounded-lg font-semibold transition">시간표 이동</button>
                                 <button id="btn-add-friday" onclick="addSlotBox('friday')" class="text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-700 px-3 py-1.5 rounded-lg font-semibold transition">+ 시간대 박스 추가</button>
                             </div>
                         </div>
@@ -149,7 +149,7 @@
                         <div class="flex justify-between items-center mb-4 pb-2 border-b border-zinc-100">
                             <h3 class="text-primary font-extrabold text-lg" id="label-saturday">토요일</h3>
                             <div class="flex items-center gap-2">
-                                <button id="btn-move-saturday" onclick="toggleMoveSelectionMode()" class="text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-700 px-3 py-1.5 rounded-lg font-semibold transition">시간표 이동</button>
+                                <button id="btn-move-saturday" onclick="toggleMoveSelectionMode('saturday')" class="text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-700 px-3 py-1.5 rounded-lg font-semibold transition">시간표 이동</button>
                                 <button id="btn-add-saturday" onclick="addSlotBox('saturday')" class="text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-700 px-3 py-1.5 rounded-lg font-semibold transition">+ 시간대 박스 추가</button>
                             </div>
                         </div>
@@ -160,7 +160,7 @@
                         <div class="flex justify-between items-center mb-4 pb-2 border-b border-zinc-100">
                             <h3 class="text-primary font-extrabold text-lg" id="label-sunday">일요일</h3>
                             <div class="flex items-center gap-2">
-                                <button id="btn-move-sunday" onclick="toggleMoveSelectionMode()" class="text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-700 px-3 py-1.5 rounded-lg font-semibold transition">시간표 이동</button>
+                                <button id="btn-move-sunday" onclick="toggleMoveSelectionMode('sunday')" class="text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-700 px-3 py-1.5 rounded-lg font-semibold transition">시간표 이동</button>
                                 <button id="btn-add-sunday" onclick="addSlotBox('sunday')" class="text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-700 px-3 py-1.5 rounded-lg font-semibold transition">+ 시간대 박스 추가</button>
                             </div>
                         </div>
@@ -1133,12 +1133,23 @@
         }
 
         // ===== 출석부 학생 카드 다중 선택 -> 일괄 시간표 이동 =====
-        function toggleMoveSelectionMode() {
+        // 선택 모드 배너를 방금 "시간표 이동"을 누른 요일 섹션 바로 위(그 요일의 시간대 박스들 바로 위)로 옮겨서
+        // 화면을 위로 스크롤하지 않아도 바로 보이게 함.
+        function positionMoveSelectionBar(day) {
+            const bar = document.getElementById("move-selection-bar");
+            const rowDiv = day ? document.getElementById(`row-${day}`) : null;
+            if (bar && rowDiv && rowDiv.parentNode) {
+                rowDiv.parentNode.insertBefore(bar, rowDiv);
+            }
+        }
+
+        function toggleMoveSelectionMode(activeDay) {
             moveSelectionModeActive = !moveSelectionModeActive;
             moveSelectedStudents = [];
             clearAllMoveHighlights();
 
             const bar = document.getElementById("move-selection-bar");
+            if (moveSelectionModeActive) positionMoveSelectionBar(activeDay);
             if (bar) bar.classList.toggle("hidden", !moveSelectionModeActive);
 
             const container = document.getElementById("timetable-container");
