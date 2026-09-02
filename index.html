@@ -186,10 +186,13 @@
                     </div>
 
                     <div class="md:col-span-7 bg-white p-6 rounded-2xl shadow-sm border border-zinc-200 space-y-5">
-                        <h3 class="font-bold text-base text-zinc-800 border-b border-zinc-100 pb-2">문자 발송 내용 작성</h3>
+                        <h3 class="font-bold text-base text-zinc-800 border-b border-zinc-100 pb-2">문자 발송 예약</h3>
                         <div id="sms-api-status-banner" class="hidden text-xs px-3 py-2 rounded-lg bg-amber-50 text-amber-700 border border-amber-200"></div>
                         <div class="space-y-1">
-                            <label class="text-xs font-semibold text-zinc-600">발송 메시지 내용</label>
+                            <div class="flex justify-between items-center">
+                                <label class="text-xs font-semibold text-zinc-600">발송 메시지 내용</label>
+                                <button type="button" onclick="openSmsTemplateModal()" class="text-[11px] bg-zinc-100 hover:bg-zinc-200 text-zinc-700 px-2.5 py-1 rounded-lg font-semibold transition">📋 내 템플릿</button>
+                            </div>
                             <textarea id="sms-msg-content" rows="7"
                                 class="w-full border border-zinc-200 rounded-xl p-3 focus:outline-none focus:ring-1 focus:ring-primary text-sm resize-none"
                                 placeholder="학부모님/학생에게 전달할 문자 내용을 입력하세요..."></textarea>
@@ -351,6 +354,29 @@
         </div>
     </div>
 
+    <div id="sms-template-modal" class="hidden fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onclick="if(event.target===this) closeSmsTemplateModal()">
+        <div class="bg-white rounded-2xl shadow-lg w-full max-w-lg max-h-[85vh] flex flex-col">
+            <div class="flex justify-between items-center p-4 border-b border-zinc-100">
+                <h3 class="font-bold text-base text-zinc-800">내 문자 템플릿 - <span id="sms-template-modal-person" class="text-primary"></span></h3>
+                <button onclick="closeSmsTemplateModal()" class="text-zinc-400 hover:text-zinc-700 text-xl leading-none">&times;</button>
+            </div>
+            <div class="p-4 space-y-3 overflow-y-auto">
+                <div id="sms-template-list" class="space-y-2"></div>
+                <p id="sms-template-empty" class="hidden text-xs text-zinc-400 text-center py-4">등록된 템플릿이 없습니다. 아래에서 새 템플릿을 추가해보세요.</p>
+            </div>
+            <div class="p-4 border-t border-zinc-100 space-y-3 bg-zinc-50/60">
+                <h4 class="text-xs font-bold text-zinc-600" id="sms-template-form-title-label">+ 새 템플릿 추가</h4>
+                <input type="hidden" id="sms-template-edit-id" value="">
+                <input type="text" id="sms-template-name" placeholder="템플릿 이름 (예: 결석 안내)" class="w-full border border-zinc-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
+                <textarea id="sms-template-content" rows="4" placeholder="템플릿 내용을 입력하세요..." class="w-full border border-zinc-300 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-primary"></textarea>
+                <div class="flex justify-end space-x-2">
+                    <button type="button" id="sms-template-cancel-edit-btn" onclick="resetSmsTemplateForm()" class="hidden px-3 py-1.5 rounded-lg text-xs font-semibold text-zinc-600 hover:bg-zinc-200 transition">편집 취소</button>
+                    <button type="button" onclick="saveSmsTemplateForm()" class="px-4 py-1.5 rounded-lg text-xs font-semibold bg-primary text-white hover:bg-primary-hover transition" id="sms-template-save-btn">템플릿 추가</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         var SUPABASE_URL = 'https://haaiwbjdlqwrfrvsurxi.supabase.co';
         var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhhYWl3YmpkbHF3cmZydnN1cnhpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY1MTQ1NjQsImV4cCI6MjEwMjA5MDU2NH0.hiMuLbrgkF2W_-PR5dfwmqI2TAOLi3yJv25_iCMovFE';
@@ -362,6 +388,9 @@
         var teacherDataStore = {};
         var attendanceRecords = {};
         var globalReservations = [];
+        // 개인별(관리자 1명 + 강사 13명) 문자 템플릿. 구조: { [사람이름]: [ {id, name, content}, ... ] }
+        var smsTemplates = {};
+        var currentLoginIdentity = null;
         // 주차별 임시 시간표 이동 기록. 구조: { [주차key]: { [강사명]: { [학생명]: { slotIds: [...] } } } }
         // 여기에 없는 학생은 항상 teacherDataStore의 기본(slotIds) 설정을 따른다 -> 다음 주차부터는 자동으로 기본값 복원.
         var weeklyOverrides = {};
@@ -450,6 +479,7 @@
                         if (row.id === 'attendanceRecords') attendanceRecords = row.data;
                         if (row.id === 'globalReservations') globalReservations = row.data;
                         if (row.id === 'weeklyOverrides') weeklyOverrides = row.data;
+                        if (row.id === 'smsTemplates') smsTemplates = row.data || {};
                         if (row.id === 'classroomAssignments' && row.data) {
                             classroomAssignments = {
                                 friday: row.data.friday || {},
@@ -556,6 +586,13 @@
             else if (row.id === 'attendanceRecords') attendanceRecords = row.data || {};
             else if (row.id === 'globalReservations') globalReservations = row.data || [];
             else if (row.id === 'weeklyOverrides') weeklyOverrides = row.data || {};
+            else if (row.id === 'smsTemplates') {
+                smsTemplates = row.data || {};
+                if (document.getElementById('sms-template-modal') && !document.getElementById('sms-template-modal').classList.contains('hidden')) {
+                    renderSmsTemplateList();
+                }
+                return;
+            }
             else if (row.id === 'classroomAssignments') {
                 classroomAssignments = {
                     friday: (row.data && row.data.friday) || {},
@@ -627,6 +664,7 @@
 
             if (inputVal === "admin8566") {
                 isAdminLoggedIn = true;
+                currentLoginIdentity = "관리자";
                 document.getElementById("user-badge").innerText = "관리자 모드 (전체 권한)";
                 document.getElementById("admin-selector-wrapper").classList.remove("hidden");
                 adminResBtn.classList.remove("hidden");
@@ -640,6 +678,7 @@
             } else if (teacherMap[inputVal]) {
                 isAdminLoggedIn = false;
                 const tName = teacherMap[inputVal];
+                currentLoginIdentity = tName;
                 document.getElementById("user-badge").innerText = `강사 모드 (${tName}T)`;
                 document.getElementById("admin-selector-wrapper").classList.add("hidden");
                 adminResBtn.classList.remove("hidden");
@@ -1853,6 +1892,129 @@
             document.getElementById("reserve-time").value = "";
             document.querySelectorAll('.recipient-checkbox').forEach(cb => cb.checked = false);
             updateSelectedCount();
+        }
+
+        // ===== 개인별 문자 템플릿 관리 =====
+        function getSmsTemplateOwner() {
+            return currentLoginIdentity || getCurrentActiveTeacher();
+        }
+
+        function openSmsTemplateModal() {
+            document.getElementById("sms-template-modal-person").innerText = getSmsTemplateOwner();
+            resetSmsTemplateForm();
+            renderSmsTemplateList();
+            document.getElementById("sms-template-modal").classList.remove("hidden");
+        }
+
+        function closeSmsTemplateModal() {
+            document.getElementById("sms-template-modal").classList.add("hidden");
+        }
+
+        function renderSmsTemplateList() {
+            const owner = getSmsTemplateOwner();
+            const list = smsTemplates[owner] || [];
+            const container = document.getElementById("sms-template-list");
+            const emptyMsg = document.getElementById("sms-template-empty");
+            if (!container) return;
+
+            if (list.length === 0) {
+                container.innerHTML = "";
+                emptyMsg.classList.remove("hidden");
+                return;
+            }
+            emptyMsg.classList.add("hidden");
+
+            container.innerHTML = list.map(tpl => `
+                <div class="border border-zinc-200 rounded-xl p-3 space-y-1.5">
+                    <div class="flex justify-between items-start gap-2">
+                        <span class="font-semibold text-sm text-zinc-800">${escapeHtml(tpl.name)}</span>
+                        <div class="flex items-center space-x-1 shrink-0">
+                            <button type="button" onclick="applySmsTemplate('${tpl.id}')" class="text-[11px] bg-primary text-white px-2.5 py-1 rounded-lg font-semibold hover:bg-primary-hover transition">적용</button>
+                            <button type="button" onclick="editSmsTemplate('${tpl.id}')" class="text-[11px] bg-zinc-100 hover:bg-zinc-200 text-zinc-700 px-2.5 py-1 rounded-lg font-semibold transition">수정</button>
+                            <button type="button" onclick="deleteSmsTemplate('${tpl.id}')" class="text-[11px] bg-rose-50 hover:bg-rose-100 text-rose-600 px-2.5 py-1 rounded-lg font-semibold transition">삭제</button>
+                        </div>
+                    </div>
+                    <p class="text-xs text-zinc-500 whitespace-pre-wrap line-clamp-2">${escapeHtml(tpl.content)}</p>
+                </div>
+            `).join("");
+        }
+
+        function resetSmsTemplateForm() {
+            document.getElementById("sms-template-edit-id").value = "";
+            document.getElementById("sms-template-name").value = "";
+            document.getElementById("sms-template-content").value = "";
+            document.getElementById("sms-template-form-title-label").innerText = "+ 새 템플릿 추가";
+            document.getElementById("sms-template-save-btn").innerText = "템플릿 추가";
+            document.getElementById("sms-template-cancel-edit-btn").classList.add("hidden");
+        }
+
+        function editSmsTemplate(id) {
+            const owner = getSmsTemplateOwner();
+            const list = smsTemplates[owner] || [];
+            const tpl = list.find(t => t.id === id);
+            if (!tpl) return;
+
+            document.getElementById("sms-template-edit-id").value = tpl.id;
+            document.getElementById("sms-template-name").value = tpl.name;
+            document.getElementById("sms-template-content").value = tpl.content;
+            document.getElementById("sms-template-form-title-label").innerText = "템플릿 수정";
+            document.getElementById("sms-template-save-btn").innerText = "수정 완료";
+            document.getElementById("sms-template-cancel-edit-btn").classList.remove("hidden");
+        }
+
+        function saveSmsTemplateForm() {
+            const owner = getSmsTemplateOwner();
+            const editId = document.getElementById("sms-template-edit-id").value;
+            const name = document.getElementById("sms-template-name").value.trim();
+            const content = document.getElementById("sms-template-content").value.trim();
+
+            if (!name) { alert("템플릿 이름을 입력해주세요."); return; }
+            if (!content) { alert("템플릿 내용을 입력해주세요."); return; }
+
+            if (!smsTemplates[owner]) smsTemplates[owner] = [];
+
+            if (editId) {
+                const tpl = smsTemplates[owner].find(t => t.id === editId);
+                if (tpl) { tpl.name = name; tpl.content = content; }
+            } else {
+                smsTemplates[owner].push({ id: String(Date.now()), name: name, content: content });
+            }
+
+            saveDataToSupabase('smsTemplates', smsTemplates);
+            resetSmsTemplateForm();
+            renderSmsTemplateList();
+        }
+
+        function deleteSmsTemplate(id) {
+            const owner = getSmsTemplateOwner();
+            const list = smsTemplates[owner] || [];
+            const tpl = list.find(t => t.id === id);
+            if (!tpl) return;
+            if (!confirm(`'${tpl.name}' 템플릿을 삭제하시겠습니까?`)) return;
+
+            smsTemplates[owner] = list.filter(t => t.id !== id);
+            saveDataToSupabase('smsTemplates', smsTemplates);
+            resetSmsTemplateForm();
+            renderSmsTemplateList();
+        }
+
+        function applySmsTemplate(id) {
+            const owner = getSmsTemplateOwner();
+            const list = smsTemplates[owner] || [];
+            const tpl = list.find(t => t.id === id);
+            if (!tpl) return;
+
+            document.getElementById("sms-msg-content").value = tpl.content;
+            closeSmsTemplateModal();
+        }
+
+        function escapeHtml(str) {
+            return String(str == null ? "" : str)
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#39;");
         }
 
         // ===== 문자(SMS) 발송 API 연동부 =====
