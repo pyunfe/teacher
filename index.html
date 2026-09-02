@@ -28,6 +28,8 @@
             main { zoom: 1; }
         }
         .student-block { transition: all 0.15s; }
+        #timetable-container.move-select-mode .student-block { cursor: pointer; }
+        .student-block.move-selected { outline: 2px solid #802020; outline-offset: -1px; background-color: rgba(128,32,32,0.06); }
         .horizontal-scroll-container::-webkit-scrollbar { height: 8px; }
         .horizontal-scroll-container::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
         .horizontal-scroll-container::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
@@ -122,12 +124,23 @@
                     </div>
                 </div>
 
+                <div id="move-selection-bar" class="hidden flex flex-wrap items-center justify-between gap-3 bg-primary/5 border border-primary/30 rounded-xl px-4 py-2.5">
+                    <span class="text-xs md:text-sm font-semibold text-primary">선택 모드: 이동할 학생을 클릭해서 선택하세요 (<span id="move-selection-count">0</span>명 선택됨)</span>
+                    <div class="flex items-center gap-2">
+                        <button onclick="openMoveModalForSelection()" id="move-selection-open-btn" disabled class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-primary text-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-primary-hover transition">선택한 학생 시간표 이동</button>
+                        <button onclick="toggleMoveSelectionMode()" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-100 text-zinc-600 hover:bg-zinc-200 transition">선택 모드 종료</button>
+                    </div>
+                </div>
+
                 <div class="space-y-8" id="timetable-container">
 
                     <div class="bg-white p-5 rounded-2xl shadow-sm border border-zinc-200">
                         <div class="flex justify-between items-center mb-4 pb-2 border-b border-zinc-100">
                             <h3 class="text-primary font-extrabold text-lg" id="label-friday">금요일</h3>
-                            <button id="btn-add-friday" onclick="addSlotBox('friday')" class="text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-700 px-3 py-1.5 rounded-lg font-semibold transition">+ 시간대 박스 추가</button>
+                            <div class="flex items-center gap-2">
+                                <button id="btn-move-friday" onclick="toggleMoveSelectionMode()" class="text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-700 px-3 py-1.5 rounded-lg font-semibold transition">시간표 이동</button>
+                                <button id="btn-add-friday" onclick="addSlotBox('friday')" class="text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-700 px-3 py-1.5 rounded-lg font-semibold transition">+ 시간대 박스 추가</button>
+                            </div>
                         </div>
                         <div id="row-friday" class="w-full"></div>
                     </div>
@@ -135,7 +148,10 @@
                     <div class="bg-white p-5 rounded-2xl shadow-sm border border-zinc-200">
                         <div class="flex justify-between items-center mb-4 pb-2 border-b border-zinc-100">
                             <h3 class="text-primary font-extrabold text-lg" id="label-saturday">토요일</h3>
-                            <button id="btn-add-saturday" onclick="addSlotBox('saturday')" class="text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-700 px-3 py-1.5 rounded-lg font-semibold transition">+ 시간대 박스 추가</button>
+                            <div class="flex items-center gap-2">
+                                <button id="btn-move-saturday" onclick="toggleMoveSelectionMode()" class="text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-700 px-3 py-1.5 rounded-lg font-semibold transition">시간표 이동</button>
+                                <button id="btn-add-saturday" onclick="addSlotBox('saturday')" class="text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-700 px-3 py-1.5 rounded-lg font-semibold transition">+ 시간대 박스 추가</button>
+                            </div>
                         </div>
                         <div id="row-saturday" class="w-full"></div>
                     </div>
@@ -143,7 +159,10 @@
                     <div class="bg-white p-5 rounded-2xl shadow-sm border border-zinc-200">
                         <div class="flex justify-between items-center mb-4 pb-2 border-b border-zinc-100">
                             <h3 class="text-primary font-extrabold text-lg" id="label-sunday">일요일</h3>
-                            <button id="btn-add-sunday" onclick="addSlotBox('sunday')" class="text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-700 px-3 py-1.5 rounded-lg font-semibold transition">+ 시간대 박스 추가</button>
+                            <div class="flex items-center gap-2">
+                                <button id="btn-move-sunday" onclick="toggleMoveSelectionMode()" class="text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-700 px-3 py-1.5 rounded-lg font-semibold transition">시간표 이동</button>
+                                <button id="btn-add-sunday" onclick="addSlotBox('sunday')" class="text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-700 px-3 py-1.5 rounded-lg font-semibold transition">+ 시간대 박스 추가</button>
+                            </div>
                         </div>
                         <div id="row-sunday" class="w-full"></div>
                     </div>
@@ -263,11 +282,11 @@
             <p class="px-4 pt-3 text-xs text-zinc-500">체크된 시간대에 학생이 등록됩니다. 여러 개를 선택하면 여러 시간표에 동시 등록됩니다.</p>
             <div class="px-4 pt-3 space-y-1.5 bg-zinc-50 mx-4 rounded-xl p-3 border border-zinc-200">
                 <label class="flex items-start space-x-2 cursor-pointer">
-                    <input type="radio" name="move-scope" value="week" id="move-scope-week" checked class="mt-0.5 w-4 h-4 text-primary focus:ring-primary">
+                    <input type="radio" name="move-scope" value="week" id="move-scope-week" checked onchange="renderMoveModalSlotList()" class="mt-0.5 w-4 h-4 text-primary focus:ring-primary">
                     <span class="text-xs text-zinc-700"><b>이번 주차(<span id="move-modal-week-label" class="text-primary font-semibold"></span>)만 임시 이동</b><br><span class="text-[11px] text-zinc-500">다음 주차부터는 자동으로 기본 시간표로 돌아갑니다.</span></span>
                 </label>
                 <label class="flex items-start space-x-2 cursor-pointer">
-                    <input type="radio" name="move-scope" value="default" id="move-scope-default" class="mt-0.5 w-4 h-4 text-primary focus:ring-primary">
+                    <input type="radio" name="move-scope" value="default" id="move-scope-default" onchange="renderMoveModalSlotList()" class="mt-0.5 w-4 h-4 text-primary focus:ring-primary">
                     <span class="text-xs text-zinc-700"><b>기본 시간표 자체를 변경</b><br><span class="text-[11px] text-zinc-500">앞으로 매 주차 이 시간표로 계속 유지됩니다.</span></span>
                 </label>
                 <button id="move-modal-clear-override-btn" onclick="clearMoveModalOverride()" class="hidden text-[11px] text-rose-600 hover:underline font-semibold pt-1">이번 주 임시 설정 초기화 (기본 시간표로 복원)</button>
@@ -407,6 +426,9 @@
         var managementTeacherFilter = "";
         var moveModalStudentName = null;
         var moveModalTeacherName = null;
+        var moveModalMultiNames = null; // 다중 선택 이동 모달일 때만 배열(학생 이름 목록), 단일 학생 이동일 땐 null
+        var moveSelectionModeActive = false;
+        var moveSelectedStudents = []; // [{name, teacherName}, ...]
 
         const teacherMap = {
             "9565": "황성웅", "9414": "정다운", "9062": "김신형", "2368": "문지현",
@@ -733,6 +755,7 @@
         async function changeWeek(weekKey) {
             currentSelectedWeek = weekKey;
             updateSectionDateLabels();
+            if (moveSelectionModeActive) toggleMoveSelectionMode();
 
             const currentTeacher = getCurrentActiveTeacher();
             if (currentTeacher === "통합출석부") {
@@ -911,13 +934,12 @@
 
             moveModalStudentName = studentName;
             moveModalTeacherName = teacherName;
+            moveModalMultiNames = null;
 
             document.getElementById("move-modal-student-name").innerText = `${studentName} (${teacherName}T)`;
             document.getElementById("move-modal-week-label").innerText = currentSelectedWeek;
 
-            const student = data.students.find(s => s.name === studentName);
-            const isTemp = student ? hasWeeklyOverride(teacherName, studentName, currentSelectedWeek) : false;
-            const currentSlotIds = student ? getEffectiveSlotIds(teacherName, student, currentSelectedWeek) : [];
+            const isTemp = hasWeeklyOverride(teacherName, studentName, currentSelectedWeek);
 
             document.getElementById("move-scope-week").checked = true;
             document.getElementById("move-scope-default").checked = false;
@@ -925,9 +947,42 @@
             document.getElementById("move-modal-delete-section").classList.toggle("hidden", !isAdminLoggedIn);
             document.getElementById("move-modal-delete-week-label").innerText = currentSelectedWeek;
 
+            renderMoveModalSlotList();
+
+            document.getElementById("move-modal").classList.remove("hidden");
+        }
+
+        // 시간표 이동 선택 모드에서 고른 여러 학생을 한 번에 같은 시간대로 옮기기 위한 모달
+        function openMoveModalMulti(teacherName, studentNames) {
+            const data = teacherDataStore[teacherName];
+            if (!data || studentNames.length === 0) return;
+
+            moveModalStudentName = null;
+            moveModalTeacherName = teacherName;
+            moveModalMultiNames = studentNames.slice();
+
+            const titleText = studentNames.length <= 3 ? studentNames.join(', ') : `${studentNames.length}명 일괄`;
+            document.getElementById("move-modal-student-name").innerText = `${titleText} (${teacherName}T)`;
+            document.getElementById("move-modal-week-label").innerText = currentSelectedWeek;
+
+            document.getElementById("move-scope-week").checked = true;
+            document.getElementById("move-scope-default").checked = false;
+            // 다중 선택 시에는 학생별 임시 설정 상태가 서로 다를 수 있어 개별 초기화/삭제 기능은 숨김
+            document.getElementById("move-modal-clear-override-btn").classList.add("hidden");
+            document.getElementById("move-modal-delete-section").classList.add("hidden");
+
+            renderMoveModalSlotList();
+
+            document.getElementById("move-modal").classList.remove("hidden");
+        }
+
+        // 체크박스 목록을 실제로 그리는 공용 함수. isCheckedFn(slotId)로 초기 체크 상태를 결정.
+        function buildMoveModalSlotListDom(teacherName, isCheckedFn) {
+            const data = teacherDataStore[teacherName];
             const dayNameKo = { friday: '금요일', saturday: '토요일', sunday: '일요일' };
             const listContainer = document.getElementById("move-modal-slot-list");
             listContainer.innerHTML = "";
+            if (!data) return;
 
             let hasAnySlot = false;
             ['friday', 'saturday', 'sunday'].forEach(day => {
@@ -945,14 +1000,13 @@
                 slotWrap.className = "space-y-1.5";
 
                 daySlots.forEach(slot => {
-                    const isChecked = currentSlotIds.includes(slot.id);
                     const label = document.createElement("label");
                     label.className = "flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-semibold border border-zinc-200 bg-zinc-50 hover:border-primary cursor-pointer transition";
 
                     const checkbox = document.createElement("input");
                     checkbox.type = "checkbox";
                     checkbox.value = slot.id;
-                    checkbox.checked = isChecked;
+                    checkbox.checked = isCheckedFn(slot.id);
                     checkbox.className = "move-modal-slot-checkbox w-4 h-4 text-primary rounded border-zinc-300 focus:ring-primary";
 
                     const textSpan = document.createElement("span");
@@ -971,23 +1025,47 @@
             if (!hasAnySlot) {
                 listContainer.innerHTML = '<div class="text-xs text-zinc-400 text-center py-6">등록할 수 있는 시간대 박스가 없습니다.</div>';
             }
+        }
 
-            document.getElementById("move-modal").classList.remove("hidden");
+        // 단일/다중 모드에 맞춰 체크 상태를 계산해서 다시 그림. 다중 모드에서는 이동 범위(라디오)를 바꿀 때마다 호출됨.
+        // 다중 + 이번 주차만 임시 이동: 학생마다 현재 시간대가 달라 혼동을 피하려고 빈 상태로 시작.
+        // 다중 + 기본 시간표 변경: 선택된 학생들이 현재 기본 시간표로 갖고 있는 시간대들을 합쳐서 미리 체크해줌.
+        function renderMoveModalSlotList() {
+            if (!moveModalTeacherName) return;
+
+            if (moveModalMultiNames) {
+                const scope = document.querySelector('input[name="move-scope"]:checked').value;
+                const data = teacherDataStore[moveModalTeacherName];
+                let checkedIdSet = new Set();
+                if (scope === 'default' && data) {
+                    moveModalMultiNames.forEach(name => {
+                        const student = data.students.find(s => s.name === name);
+                        if (student) getStudentSlotIds(student).forEach(id => checkedIdSet.add(id));
+                    });
+                }
+                buildMoveModalSlotListDom(moveModalTeacherName, id => checkedIdSet.has(id));
+            } else {
+                const data = teacherDataStore[moveModalTeacherName];
+                const student = data ? data.students.find(s => s.name === moveModalStudentName) : null;
+                const currentSlotIds = student ? getEffectiveSlotIds(moveModalTeacherName, student, currentSelectedWeek) : [];
+                buildMoveModalSlotListDom(moveModalTeacherName, id => currentSlotIds.includes(id));
+            }
         }
 
         function closeMoveModal() {
             document.getElementById("move-modal").classList.add("hidden");
             moveModalStudentName = null;
             moveModalTeacherName = null;
+            moveModalMultiNames = null;
         }
 
         function saveMoveModalSelection() {
-            if (!moveModalStudentName || !moveModalTeacherName) return;
+            if (!moveModalTeacherName) return;
             const data = teacherDataStore[moveModalTeacherName];
             if (!data) return;
 
-            const student = data.students.find(s => s.name === moveModalStudentName);
-            if (!student) return;
+            const targetNames = moveModalMultiNames ? moveModalMultiNames.slice() : (moveModalStudentName ? [moveModalStudentName] : []);
+            if (targetNames.length === 0) return;
 
             const checkedIds = Array.from(document.querySelectorAll('.move-modal-slot-checkbox:checked')).map(cb => cb.value);
 
@@ -997,27 +1075,46 @@
             }
 
             const scope = document.querySelector('input[name="move-scope"]:checked').value;
+            const teacherName = moveModalTeacherName;
+
+            targetNames.forEach(name => {
+                const student = data.students.find(s => s.name === name);
+                if (!student) return;
+
+                if (scope === 'week') {
+                    // 이번 주차에만 임시로 반영. 강사의 기본 시간표(student.slotIds)는 그대로 유지되어 다음 주차부터 자동 복원됨.
+                    if (!weeklyOverrides[currentSelectedWeek]) weeklyOverrides[currentSelectedWeek] = {};
+                    if (!weeklyOverrides[currentSelectedWeek][teacherName]) weeklyOverrides[currentSelectedWeek][teacherName] = {};
+                    weeklyOverrides[currentSelectedWeek][teacherName][name] = { slotIds: checkedIds.slice() };
+                } else {
+                    // 기본 시간표 자체를 변경. 이번 주차에 걸려있던 임시 이동 기록은 정리한다.
+                    student.slotIds = checkedIds.slice();
+                    delete student.slotId;
+                    const wk = weeklyOverrides[currentSelectedWeek];
+                    if (wk && wk[teacherName] && wk[teacherName][name]) {
+                        delete wk[teacherName][name];
+                    }
+                }
+            });
 
             if (scope === 'week') {
-                // 이번 주차에만 임시로 반영. 강사의 기본 시간표(student.slotIds)는 그대로 유지되어 다음 주차부터 자동 복원됨.
-                setWeeklyOverride(moveModalTeacherName, moveModalStudentName, currentSelectedWeek, checkedIds);
+                saveDataToSupabase('weeklyOverrides', weeklyOverrides);
             } else {
-                // 기본 시간표 자체를 변경. 이번 주차에 걸려있던 임시 이동 기록은 정리한다.
-                student.slotIds = checkedIds;
-                delete student.slotId;
-                clearWeeklyOverride(moveModalTeacherName, moveModalStudentName, currentSelectedWeek);
-                sortStudentsAlphabetically(moveModalTeacherName);
+                sortStudentsAlphabetically(teacherName);
                 saveDataToSupabase('teacherDataStore', teacherDataStore);
+                saveDataToSupabase('weeklyOverrides', weeklyOverrides);
             }
 
             const currentTeacher = getCurrentActiveTeacher();
             if (currentTeacher === "통합출석부") {
                 renderIntegratedTimetable();
             } else {
-                renderTimetableAndSlots(moveModalTeacherName);
+                renderTimetableAndSlots(teacherName);
             }
 
+            const wasMulti = !!moveModalMultiNames;
             closeMoveModal();
+            if (wasMulti && moveSelectionModeActive) toggleMoveSelectionMode();
         }
 
         function clearMoveModalOverride() {
@@ -1035,7 +1132,81 @@
             closeMoveModal();
         }
 
+        // ===== 출석부 학생 카드 다중 선택 -> 일괄 시간표 이동 =====
+        function toggleMoveSelectionMode() {
+            moveSelectionModeActive = !moveSelectionModeActive;
+            moveSelectedStudents = [];
+            clearAllMoveHighlights();
+
+            const bar = document.getElementById("move-selection-bar");
+            if (bar) bar.classList.toggle("hidden", !moveSelectionModeActive);
+
+            const container = document.getElementById("timetable-container");
+            if (container) container.classList.toggle("move-select-mode", moveSelectionModeActive);
+
+            ['friday', 'saturday', 'sunday'].forEach(day => {
+                const btn = document.getElementById(`btn-move-${day}`);
+                if (!btn) return;
+                btn.innerText = moveSelectionModeActive ? "선택 모드 종료" : "시간표 이동";
+                btn.className = moveSelectionModeActive
+                    ? "text-xs bg-primary text-white px-3 py-1.5 rounded-lg font-semibold transition"
+                    : "text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-700 px-3 py-1.5 rounded-lg font-semibold transition";
+            });
+
+            updateMoveSelectionCountUI();
+        }
+
+        function clearAllMoveHighlights() {
+            document.querySelectorAll('.student-block.move-selected').forEach(el => el.classList.remove('move-selected'));
+        }
+
+        function updateMoveSelectionCountUI() {
+            const countEl = document.getElementById("move-selection-count");
+            if (countEl) countEl.innerText = moveSelectedStudents.length;
+            const openBtn = document.getElementById("move-selection-open-btn");
+            if (openBtn) openBtn.disabled = moveSelectedStudents.length === 0;
+        }
+
+        // 선택 모드일 때 학생 카드를 클릭하면 출석/결석 버튼이나 비고 입력이 아닌 경우에만 선택을 토글
+        function handleStudentBlockClick(event, studentName, teacherName) {
+            if (!moveSelectionModeActive) return;
+            if (event.target.closest('button, input')) return;
+            toggleMoveStudentSelection(studentName, teacherName);
+        }
+
+        function toggleMoveStudentSelection(studentName, teacherName) {
+            const idx = moveSelectedStudents.findIndex(x => x.name === studentName && x.teacherName === teacherName);
+            let nowSelected;
+            if (idx !== -1) {
+                moveSelectedStudents.splice(idx, 1);
+                nowSelected = false;
+            } else {
+                if (moveSelectedStudents.length > 0 && moveSelectedStudents[0].teacherName !== teacherName) {
+                    alert("같은 강사의 학생만 함께 선택해서 이동할 수 있습니다.");
+                    return;
+                }
+                moveSelectedStudents.push({ name: studentName, teacherName });
+                nowSelected = true;
+            }
+
+            document.querySelectorAll('.student-block').forEach(el => {
+                if (el.dataset.studentName === studentName && el.dataset.teacherName === teacherName) {
+                    el.classList.toggle('move-selected', nowSelected);
+                }
+            });
+
+            updateMoveSelectionCountUI();
+        }
+
+        function openMoveModalForSelection() {
+            if (moveSelectedStudents.length === 0) return;
+            const teacherName = moveSelectedStudents[0].teacherName;
+            const names = moveSelectedStudents.map(x => x.name);
+            openMoveModalMulti(teacherName, names);
+        }
+
         function changeTeacher(targetValue) {
+            if (moveSelectionModeActive) toggleMoveSelectionMode();
             if (targetValue === "통합출석부") {
                 document.getElementById("attendance-title").innerText = "전체 통합 출석부";
                 if(document.getElementById("teacher-select")) document.getElementById("teacher-select").value = "통합출석부";
@@ -1257,7 +1428,7 @@
                             const newNameClass = isNewThisWeek ? "bg-red-100" : "";
 
                             studentsHtml += `
-                                <div class="student-block flex items-center p-2 rounded-lg border border-zinc-200 bg-white shadow-sm hover:border-primary" data-student-name="${s.name}" ondblclick="openMoveModal('${s.name}', '${tName}')" title="더블클릭하면 시간표 이동이 가능합니다">
+                                <div class="student-block flex items-center p-2 rounded-lg border border-zinc-200 bg-white shadow-sm hover:border-primary" data-student-name="${s.name}" data-teacher-name="${tName}" onclick="handleStudentBlockClick(event, '${s.name}', '${tName}')" ondblclick="openMoveModal('${s.name}', '${tName}')" title="더블클릭하면 시간표 이동이 가능합니다">
                                     <div class="w-24 shrink-0 truncate mr-1.5">
                                         <span class="font-bold text-xs text-zinc-900 ${newNameClass}">${s.name}</span>
                                         <span class="text-[10px] text-zinc-500">(${s.school})</span>
@@ -1340,7 +1511,7 @@
                         const newNameClass = isNewThisWeek ? "bg-red-100" : "";
 
                         studentsHtml += `
-                            <div class="student-block flex items-center p-2 rounded-lg border border-zinc-200 bg-white shadow-sm hover:border-primary" data-student-name="${s.name}" ondblclick="openMoveModal('${s.name}', '${teacherName}')" title="더블클릭하면 시간표 이동이 가능합니다">
+                            <div class="student-block flex items-center p-2 rounded-lg border border-zinc-200 bg-white shadow-sm hover:border-primary" data-student-name="${s.name}" data-teacher-name="${teacherName}" onclick="handleStudentBlockClick(event, '${s.name}', '${teacherName}')" ondblclick="openMoveModal('${s.name}', '${teacherName}')" title="더블클릭하면 시간표 이동이 가능합니다">
                                 <div class="w-24 shrink-0 truncate mr-1.5">
                                     <span class="font-bold text-xs text-zinc-900 ${newNameClass}">${s.name}</span>
                                     <span class="text-[10px] text-zinc-500">(${s.school})</span>
@@ -2558,6 +2729,7 @@
         }
 
         function switchTab(tabName) {
+            if (tabName !== 'attendance' && moveSelectionModeActive) toggleMoveSelectionMode();
             const attBtn = document.getElementById("tab-attendance-btn");
             const mngBtn = document.getElementById("tab-management-btn");
             const classroomBtn = document.getElementById("tab-classroom-btn");
