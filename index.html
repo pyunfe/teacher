@@ -1033,23 +1033,20 @@
         function renderMoveModalSlotList() {
             if (!moveModalTeacherName) return;
 
-            if (moveModalMultiNames) {
-                const scope = document.querySelector('input[name="move-scope"]:checked').value;
-                const data = teacherDataStore[moveModalTeacherName];
-                let checkedIdSet = new Set();
-                if (scope === 'default' && data) {
-                    moveModalMultiNames.forEach(name => {
-                        const student = data.students.find(s => s.name === name);
-                        if (student) getStudentSlotIds(student).forEach(id => checkedIdSet.add(id));
-                    });
-                }
-                buildMoveModalSlotListDom(moveModalTeacherName, id => checkedIdSet.has(id));
-            } else {
-                const data = teacherDataStore[moveModalTeacherName];
-                const student = data ? data.students.find(s => s.name === moveModalStudentName) : null;
-                const currentSlotIds = student ? getEffectiveSlotIds(moveModalTeacherName, student, currentSelectedWeek) : [];
-                buildMoveModalSlotListDom(moveModalTeacherName, id => currentSlotIds.includes(id));
+            const names = moveModalMultiNames ? moveModalMultiNames : (moveModalStudentName ? [moveModalStudentName] : []);
+            const scope = document.querySelector('input[name="move-scope"]:checked').value;
+            const data = teacherDataStore[moveModalTeacherName];
+
+            // 이번 주차만 임시 이동(week)인 경우: 학생마다(또는 이미 걸려있던 임시 설정과) 헷갈리지 않도록 항상 빈 상태로 시작.
+            // 기본 시간표 변경(default)인 경우: 현재 기본 시간표(임시 이동 제외)에 들어있는 시간대를 미리 체크.
+            let checkedIdSet = new Set();
+            if (scope === 'default' && data) {
+                names.forEach(name => {
+                    const student = data.students.find(s => s.name === name);
+                    if (student) getStudentSlotIds(student).forEach(id => checkedIdSet.add(id));
+                });
             }
+            buildMoveModalSlotListDom(moveModalTeacherName, id => checkedIdSet.has(id));
         }
 
         function closeMoveModal() {
