@@ -2285,7 +2285,7 @@
                 if (end <= rawRange.start) end = rawRange.start + 1;
                 range = { start: rawRange.start, end };
             }
-            const count = tData ? tData.students.filter(s => getStudentSlotIds(s).includes(slot.id)).length : 0;
+            const count = tData ? tData.students.filter(s => getStudentSlotIds(s).includes(slot.id) && isVisibleInWeek(s, currentSelectedWeek)).length : 0;
             return { teacherName, slot, range, count, key: `${teacherName}::${slot.id}` };
         }
 
