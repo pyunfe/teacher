@@ -270,6 +270,10 @@
                 <button id="move-modal-clear-override-btn" onclick="clearMoveModalOverride()" class="hidden text-[11px] text-rose-600 hover:underline font-semibold pt-1">이번 주 임시 설정 초기화 (기본 시간표로 복원)</button>
             </div>
             <div id="move-modal-slot-list" class="p-4 space-y-4 overflow-y-auto"></div>
+            <div id="move-modal-delete-section" class="hidden px-4 pb-3 pt-1 border-t border-zinc-100">
+                <button type="button" onclick="handleDeleteFromMoveModal()" class="text-xs bg-rose-50 hover:bg-rose-100 text-rose-600 px-3 py-1.5 rounded-lg font-semibold transition">이번 주차부터 삭제 (퇴원 처리)</button>
+                <p class="text-[11px] text-zinc-400 mt-1">이번 주차 출석부부터 바로 빠지고, 이전 주차의 출석 기록은 그대로 유지됩니다.</p>
+            </div>
             <div class="flex justify-end space-x-2 p-4 border-t border-zinc-100">
                 <button onclick="closeMoveModal()" class="px-4 py-2 rounded-lg text-sm font-semibold text-zinc-600 hover:bg-zinc-100 transition">취소</button>
                 <button onclick="saveMoveModalSelection()" class="px-4 py-2 rounded-lg text-sm font-semibold bg-primary text-white hover:bg-primary-hover transition">저장</button>
@@ -915,6 +919,7 @@
             document.getElementById("move-scope-week").checked = true;
             document.getElementById("move-scope-default").checked = false;
             document.getElementById("move-modal-clear-override-btn").classList.toggle("hidden", !isTemp);
+            document.getElementById("move-modal-delete-section").classList.toggle("hidden", !isAdminLoggedIn);
 
             const dayNameKo = { friday: '금요일', saturday: '토요일', sunday: '일요일' };
             const listContainer = document.getElementById("move-modal-slot-list");
@@ -1749,6 +1754,41 @@
             saveDataToSupabase('teacherDataStore', teacherDataStore);
 
             return student;
+        }
+
+        // "YYYY-MM-DD 주차" 형식의 weekKey에서 7일 전 주차의 weekKey를 계산
+        function getPrevWeekKey(weekKey) {
+            const datePart = String(weekKey || "").replace(' 주차', '');
+            const d = parseYmdToLocalDate(datePart);
+            if (!d) return null;
+            d.setDate(d.getDate() - 7);
+            return `${getFormattedDate(d)} 주차`;
+        }
+
+        // 출석부(시간표 등록 관리 모달)에서 바로 삭제: 지금 보고 있는 주차(currentSelectedWeek)부터
+        // 그 학생이 출석부에서 빠지고, 그 이전 주차의 출석 기록은 그대로 유지된다.
+        // 퇴원을 늦게 처리한 경우(예: 저번 주에 이미 그만뒀는데 이번 주에야 처리) 이번 주차 출석부부터
+        // 바로 빠지게 하려면 deletedWeekKey를 "오늘" 기준이 아니라 currentSelectedWeek 바로 이전 주차로 설정해야 함.
+        function handleDeleteFromMoveModal() {
+            if (!isAdminLoggedIn) return;
+            if (!moveModalStudentName || !moveModalTeacherName) return;
+            const data = teacherDataStore[moveModalTeacherName];
+            if (!data) return;
+            const index = data.students.findIndex(s => s.name === moveModalStudentName);
+            if (index === -1) return;
+            const student = data.students[index];
+
+            if (!confirm(`${student.name} 학생을 ${currentSelectedWeek}부터 삭제하시겠습니까?\n\n이번 주차 출석부부터 바로 빠지고, 이전 주차의 출석 기록은 그대로 유지됩니다.\n(원생 목록에서도 즉시 사라집니다. 되돌릴 수 없습니다.)`)) return;
+
+            student.status = 'deleted';
+            student.deletedAt = getFormattedDate(new Date());
+            student.deletedWeekKey = getPrevWeekKey(currentSelectedWeek);
+
+            saveDataToSupabase('teacherDataStore', teacherDataStore);
+
+            const teacherName = moveModalTeacherName;
+            closeMoveModal();
+            refreshAfterStudentListChange(teacherName);
         }
 
         function refreshAfterStudentListChange(teacherName) {
