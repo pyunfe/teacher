@@ -391,6 +391,13 @@
                 <button onclick="selectAbsenceReason('병결')" class="w-full px-4 py-2.5 rounded-lg text-sm font-semibold bg-zinc-50 hover:bg-rose-50 hover:text-rose-600 text-zinc-700 border border-zinc-200 transition">병결</button>
                 <button onclick="selectAbsenceReason('가족행사')" class="w-full px-4 py-2.5 rounded-lg text-sm font-semibold bg-zinc-50 hover:bg-rose-50 hover:text-rose-600 text-zinc-700 border border-zinc-200 transition">가족행사</button>
                 <button onclick="selectAbsenceReason('개인사정')" class="w-full px-4 py-2.5 rounded-lg text-sm font-semibold bg-zinc-50 hover:bg-rose-50 hover:text-rose-600 text-zinc-700 border border-zinc-200 transition">개인사정</button>
+                <button onclick="toggleAbsenceCustomInput()" class="w-full px-4 py-2.5 rounded-lg text-sm font-semibold bg-zinc-50 hover:bg-rose-50 hover:text-rose-600 text-zinc-700 border border-zinc-200 transition">직접 입력</button>
+                <div id="absence-custom-input-wrap" class="hidden space-y-2 pt-1">
+                    <input type="text" id="absence-custom-input" placeholder="사유를 입력하세요"
+                        onkeydown="if(event.key==='Enter'){ event.preventDefault(); confirmAbsenceCustomReason(); }"
+                        class="w-full text-sm border border-zinc-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary">
+                    <button onclick="confirmAbsenceCustomReason()" class="w-full px-4 py-2 rounded-lg text-sm font-semibold bg-primary text-white hover:opacity-90 transition">확인</button>
+                </div>
             </div>
         </div>
     </div>
@@ -1886,9 +1893,32 @@
 
         function closeAbsenceReasonModal() {
             document.getElementById("absence-reason-modal").classList.add("hidden");
+            document.getElementById("absence-custom-input-wrap").classList.add("hidden");
+            document.getElementById("absence-custom-input").value = "";
             absenceModalStudentName = null;
             absenceModalSlotId = null;
             absenceModalBtnElement = null;
+        }
+
+        function toggleAbsenceCustomInput() {
+            const wrap = document.getElementById("absence-custom-input-wrap");
+            const willShow = wrap.classList.contains("hidden");
+            wrap.classList.toggle("hidden");
+            if (willShow) {
+                const input = document.getElementById("absence-custom-input");
+                input.value = "";
+                input.focus();
+            }
+        }
+
+        function confirmAbsenceCustomReason() {
+            const input = document.getElementById("absence-custom-input");
+            const reason = input.value.trim();
+            if (!reason) {
+                alert("사유를 입력해주세요.");
+                return;
+            }
+            selectAbsenceReason(reason);
         }
 
         function selectAbsenceReason(reason) {
