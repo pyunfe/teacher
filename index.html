@@ -380,6 +380,20 @@
         </div>
     </div>
 
+    <div id="absence-reason-modal" class="hidden fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onclick="if(event.target===this) closeAbsenceReasonModal()">
+        <div class="bg-white rounded-2xl shadow-lg w-full max-w-xs flex flex-col">
+            <div class="flex justify-between items-center p-4 border-b border-zinc-100">
+                <h3 class="font-bold text-base text-zinc-800">결석 사유 선택</h3>
+                <button onclick="closeAbsenceReasonModal()" class="text-zinc-400 hover:text-zinc-700 text-xl leading-none">&times;</button>
+            </div>
+            <div class="p-4 space-y-2">
+                <button onclick="selectAbsenceReason('병결')" class="w-full px-4 py-2.5 rounded-lg text-sm font-semibold bg-zinc-50 hover:bg-rose-50 hover:text-rose-600 text-zinc-700 border border-zinc-200 transition">병결</button>
+                <button onclick="selectAbsenceReason('가족행사')" class="w-full px-4 py-2.5 rounded-lg text-sm font-semibold bg-zinc-50 hover:bg-rose-50 hover:text-rose-600 text-zinc-700 border border-zinc-200 transition">가족행사</button>
+                <button onclick="selectAbsenceReason('개인사정')" class="w-full px-4 py-2.5 rounded-lg text-sm font-semibold bg-zinc-50 hover:bg-rose-50 hover:text-rose-600 text-zinc-700 border border-zinc-200 transition">개인사정</button>
+            </div>
+        </div>
+    </div>
+
     <div id="sms-template-modal" class="hidden fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onclick="if(event.target===this) closeSmsTemplateModal()">
         <div class="bg-white rounded-2xl shadow-lg w-full max-w-lg max-h-[85vh] flex flex-col">
             <div class="flex justify-between items-center p-4 border-b border-zinc-100">
@@ -526,28 +540,150 @@
             }
         }
 
-        // teacherDataStore는 13명 강사 데이터가 하나의 row에 통째로 들어있어서, 그냥 saveDataToSupabase로
-        // 저장하면 내 브라우저가 실시간 동기화를 놓친 사이(탭 백그라운드 등으로 흔히 발생) 다른 강사가
-        // 그 사이에 저장한 변경사항까지 내 오래된 로컬 복사본으로 덮어써서 롤백시켜버리는 문제가 있었음.
-        // 그래서 저장 직전에 서버 최신본을 다시 읽어와서, 내가 수정한 강사 데이터만 그 위에 얹어 저장한다.
+        // app_data 테이블은 강사/출석/시간표 등 데이터가 각각 하나의 row에 통째로 들어있어서, 그냥
+        // saveDataToSupabase로 저장하면 내 브라우저가 실시간 동기화를 놓친 사이(탭 백그라운드 등으로
+        // 흔히 발생) 다른 사람이 그 사이에 저장한 변경사항까지 내 오래된 로컬 복사본으로 덮어써서
+        // 롤백시켜버리는 문제가 있었음. 그래서 저장 직전에 서버 최신본을 다시 읽어와서, 내가 방금
+        // 수정한 부분만 그 위에 얹어 저장한다(병합 저장). 아래 saveXxx 함수들이 공통으로 이 방식을 쓴다.
+        async function fetchLatestRemoteData(key) {
+            if (!supabaseClient) return null;
+            try {
+                const { data, error } = await supabaseClient
+                    .from('app_data')
+                    .select('data')
+                    .eq('id', key)
+                    .maybeSingle();
+                if (!error && data && data.data !== undefined && data.data !== null) return data.data;
+            } catch (err) {
+                console.error(`${key} 최신본 조회 실패:`, err);
+            }
+            return null;
+        }
+
         async function saveTeacherData(teacherName) {
             const editedTeacherData = teacherDataStore[teacherName];
-            if (supabaseClient) {
-                try {
-                    const { data, error } = await supabaseClient
-                        .from('app_data')
-                        .select('data')
-                        .eq('id', 'teacherDataStore')
-                        .maybeSingle();
-                    if (!error && data && data.data) {
-                        teacherDataStore = data.data;
-                    }
-                } catch (err) {
-                    console.error("teacherDataStore 최신본 조회 실패:", err);
-                }
-            }
+            const remote = await fetchLatestRemoteData('teacherDataStore');
+            if (remote) teacherDataStore = remote;
             teacherDataStore[teacherName] = editedTeacherData;
             saveDataToSupabase('teacherDataStore', teacherDataStore);
+            refreshCurrentViewSafely();
+        }
+
+        // 출석 상태/비고 한 칸(주차+학생+시간대 단위)만 최신본 위에 얹어서 저장
+        async function saveAttendanceRecord(weekKey, recordKey, recordValue) {
+            const remote = await fetchLatestRemoteData('attendanceRecords');
+            if (remote) attendanceRecords = remote;
+            if (!attendanceRecords[weekKey]) attendanceRecords[weekKey] = {};
+            attendanceRecords[weekKey][recordKey] = recordValue;
+            saveDataToSupabase('attendanceRecords', attendanceRecords);
+            refreshCurrentViewSafely();
+        }
+
+        // 시간대 박스 자유 메모 한 칸(주차+강사+슬롯 단위)만 최신본 위에 얹어서 저장
+        async function saveSlotFreeMemo(weekKey, memoKey, memoText) {
+            const remote = await fetchLatestRemoteData('slotFreeMemos');
+            if (remote) slotFreeMemos = remote;
+            if (!slotFreeMemos[weekKey]) slotFreeMemos[weekKey] = {};
+            slotFreeMemos[weekKey][memoKey] = memoText;
+            saveDataToSupabase('slotFreeMemos', slotFreeMemos);
+            refreshCurrentViewSafely();
+        }
+
+        // 주차별 임시 시간표 이동(weeklyOverrides)은 강사 단위로 최신본 위에 얹어서 저장
+        async function saveWeeklyOverridesForTeacher(weekKey, teacherName) {
+            const localTeacherWeek = weeklyOverrides[weekKey] ? weeklyOverrides[weekKey][teacherName] : undefined;
+            const remote = await fetchLatestRemoteData('weeklyOverrides');
+            if (remote) weeklyOverrides = remote;
+            if (!weeklyOverrides[weekKey]) weeklyOverrides[weekKey] = {};
+            if (localTeacherWeek === undefined) {
+                delete weeklyOverrides[weekKey][teacherName];
+            } else {
+                weeklyOverrides[weekKey][teacherName] = localTeacherWeek;
+            }
+            saveDataToSupabase('weeklyOverrides', weeklyOverrides);
+            refreshCurrentViewSafely();
+        }
+
+        // 학생 완전 제거: 최신본을 다시 받아서 같은 삭제 로직을 그 위에 다시 적용(replay)한다.
+        async function purgeStudentEverywhere(teacherName, studentName) {
+            const remoteAttendance = await fetchLatestRemoteData('attendanceRecords');
+            if (remoteAttendance) attendanceRecords = remoteAttendance;
+            Object.keys(attendanceRecords).forEach(weekKey => {
+                const weekRecords = attendanceRecords[weekKey];
+                if (!weekRecords) return;
+                Object.keys(weekRecords).forEach(key => {
+                    if (key === studentName || key.startsWith(`${studentName}__`)) {
+                        delete weekRecords[key];
+                    }
+                });
+            });
+            saveDataToSupabase('attendanceRecords', attendanceRecords);
+
+            const remoteOverrides = await fetchLatestRemoteData('weeklyOverrides');
+            if (remoteOverrides) weeklyOverrides = remoteOverrides;
+            Object.keys(weeklyOverrides).forEach(weekKey => {
+                const wk = weeklyOverrides[weekKey];
+                if (wk && wk[teacherName] && wk[teacherName][studentName]) {
+                    delete wk[teacherName][studentName];
+                }
+            });
+            saveDataToSupabase('weeklyOverrides', weeklyOverrides);
+            refreshCurrentViewSafely();
+        }
+
+        // 개인별 문자 템플릿은 소유자(관리자/강사 이름) 단위로 최신본 위에 얹어서 저장
+        async function saveSmsTemplatesForOwner(owner) {
+            const localList = smsTemplates[owner];
+            const remote = await fetchLatestRemoteData('smsTemplates');
+            if (remote) smsTemplates = remote;
+            if (localList === undefined) delete smsTemplates[owner];
+            else smsTemplates[owner] = localList;
+            saveDataToSupabase('smsTemplates', smsTemplates);
+        }
+
+        // 문자 발송 예약 배열은 id로 항목을 지정해서 병합 저장한다.
+        // changedIds에 해당하는 항목은 로컬(방금 수정한) 버전을 그대로 살리고, 나머지는 서버 최신본을 따른다.
+        async function saveGlobalReservationsMerge(changedIds) {
+            const localReservations = globalReservations;
+            const remote = await fetchLatestRemoteData('globalReservations');
+            if (Array.isArray(remote)) {
+                const localById = new Map(localReservations.map(r => [r.id, r]));
+                const merged = remote.map(r => (changedIds.includes(r.id) && localById.has(r.id)) ? localById.get(r.id) : r);
+                localReservations.forEach(r => {
+                    if (changedIds.includes(r.id) && !remote.some(rr => rr.id === r.id)) merged.push(r);
+                });
+                globalReservations = merged;
+            }
+            saveDataToSupabase('globalReservations', globalReservations);
+            refreshCurrentViewSafely();
+        }
+
+        async function saveGlobalReservationRemove(id) {
+            const remote = await fetchLatestRemoteData('globalReservations');
+            if (Array.isArray(remote)) globalReservations = remote;
+            globalReservations = globalReservations.filter(r => r.id !== id);
+            saveDataToSupabase('globalReservations', globalReservations);
+            refreshCurrentViewSafely();
+        }
+
+        // 강의실 배정(classroomAssignments)은 요일+배정 키 단위로 최신본 위에 얹어서 저장
+        async function saveClassroomAssignment(dayKey, assignKey) {
+            const localValue = classroomAssignments[dayKey] ? classroomAssignments[dayKey][assignKey] : undefined;
+            const remote = await fetchLatestRemoteData('classroomAssignments');
+            if (remote) {
+                classroomAssignments = {
+                    friday: remote.friday || {},
+                    saturday: remote.saturday || {},
+                    sunday: remote.sunday || {}
+                };
+            }
+            if (!classroomAssignments[dayKey]) classroomAssignments[dayKey] = {};
+            if (localValue === undefined) {
+                delete classroomAssignments[dayKey][assignKey];
+            } else {
+                classroomAssignments[dayKey][assignKey] = localValue;
+            }
+            saveDataToSupabase('classroomAssignments', classroomAssignments);
             refreshCurrentViewSafely();
         }
 
@@ -687,8 +823,15 @@
             }
         }, true);
 
+        // 실시간 동기화 등으로 인한 재렌더링은 화면 곳곳의 innerHTML을 통째로 새로 그리기 때문에,
+        // 그 사이에 브라우저(특히 태블릿에서 가상 키보드가 접히는 시점과 겹치면)가 스크롤 위치를
+        // 기준으로 삼을 DOM을 잃어버려서 화면이 맨 위로 튀는 문제가 있었음. 렌더링 전후로 스크롤
+        // 위치를 직접 기억했다가 복원해서 사용자가 보고 있던/입력하던 위치에 그대로 머물게 한다.
         function renderCurrentActiveView() {
             if (document.getElementById("app-screen").classList.contains('hidden')) return;
+
+            const scrollX = window.scrollX;
+            const scrollY = window.scrollY;
 
             const attSec = document.getElementById("tab-attendance");
             const mngSec = document.getElementById("tab-management");
@@ -706,6 +849,8 @@
             } else if (adminResSec && !adminResSec.classList.contains('hidden')) {
                 renderAdminReservations();
             }
+
+            requestAnimationFrame(() => window.scrollTo(scrollX, scrollY));
         }
 
         async function handleLogin() {
@@ -830,14 +975,14 @@
             if (!weeklyOverrides[weekKey]) weeklyOverrides[weekKey] = {};
             if (!weeklyOverrides[weekKey][teacherName]) weeklyOverrides[weekKey][teacherName] = {};
             weeklyOverrides[weekKey][teacherName][studentName] = { slotIds: slotIds.slice() };
-            saveDataToSupabase('weeklyOverrides', weeklyOverrides);
+            saveWeeklyOverridesForTeacher(weekKey, teacherName);
         }
 
         function clearWeeklyOverride(teacherName, studentName, weekKey) {
             const wk = weeklyOverrides[weekKey];
             if (wk && wk[teacherName] && wk[teacherName][studentName]) {
                 delete wk[teacherName][studentName];
-                saveDataToSupabase('weeklyOverrides', weeklyOverrides);
+                saveWeeklyOverridesForTeacher(weekKey, teacherName);
             }
         }
 
@@ -1124,11 +1269,11 @@
             });
 
             if (scope === 'week') {
-                saveDataToSupabase('weeklyOverrides', weeklyOverrides);
+                saveWeeklyOverridesForTeacher(currentSelectedWeek, teacherName);
             } else {
                 sortStudentsAlphabetically(teacherName);
                 saveTeacherData(teacherName);
-                saveDataToSupabase('weeklyOverrides', weeklyOverrides);
+                saveWeeklyOverridesForTeacher(currentSelectedWeek, teacherName);
             }
 
             const currentTeacher = getCurrentActiveTeacher();
@@ -1374,13 +1519,13 @@
         function updateStudentStatus(studentName, slotId, status) {
             const rec = getStudentRecord(studentName, slotId);
             rec.status = status;
-            saveDataToSupabase('attendanceRecords', attendanceRecords);
+            saveAttendanceRecord(currentSelectedWeek, getRecordKey(studentName, slotId), rec);
         }
 
         function updateStudentMemo(studentName, slotId, memoText) {
             const rec = getStudentRecord(studentName, slotId);
             rec.memo = memoText;
-            saveDataToSupabase('attendanceRecords', attendanceRecords);
+            saveAttendanceRecord(currentSelectedWeek, getRecordKey(studentName, slotId), rec);
         }
 
         // 시간대 박스 하단의 자유 메모(학생과 무관, 주차별로 강사/시간대 박스 단위로 저장)
@@ -1395,9 +1540,7 @@
         }
 
         function updateSlotFreeMemo(teacherName, slotId, memoText) {
-            if (!slotFreeMemos[currentSelectedWeek]) slotFreeMemos[currentSelectedWeek] = {};
-            slotFreeMemos[currentSelectedWeek][getSlotFreeMemoKey(teacherName, slotId)] = memoText;
-            saveDataToSupabase('slotFreeMemos', slotFreeMemos);
+            saveSlotFreeMemo(currentSelectedWeek, getSlotFreeMemoKey(teacherName, slotId), memoText);
         }
 
         function renderIntegratedFilterBar() {
@@ -1490,7 +1633,7 @@
                                     </div>
                                     <div class="flex items-center space-x-1 shrink-0 mr-1.5">
                                         <button onclick="handleStatusClick('${s.name}', '${slot.id}', '출석', this)" class="px-2 py-0.5 text-[11px] rounded ${attBtnClass} status-btn">출석</button>
-                                        <button onclick="handleStatusClick('${s.name}', '${slot.id}', '결석', this)" class="px-2 py-0.5 text-[11px] rounded ${absBtnClass} status-btn">결석</button>
+                                        <button onclick="openAbsenceReasonModal('${s.name}', '${slot.id}', this)" class="px-2 py-0.5 text-[11px] rounded ${absBtnClass} status-btn">결석</button>
                                     </div>
                                     <div class="flex-1 min-w-0">
                                         <input type="text" placeholder="비고" value="${rec.memo}"
@@ -1623,6 +1766,42 @@
             } else {
                 btnElement.className = "px-2 py-0.5 text-[11px] rounded font-bold bg-[#fee2e2] text-[#b91c1c] status-btn";
             }
+        }
+
+        // ===== 결석 버튼 -> 사유 선택 모달 =====
+        var absenceModalStudentName = null;
+        var absenceModalSlotId = null;
+        var absenceModalBtnElement = null;
+
+        function openAbsenceReasonModal(studentName, slotId, btnElement) {
+            absenceModalStudentName = studentName;
+            absenceModalSlotId = slotId;
+            absenceModalBtnElement = btnElement;
+            document.getElementById("absence-reason-modal").classList.remove("hidden");
+        }
+
+        function closeAbsenceReasonModal() {
+            document.getElementById("absence-reason-modal").classList.add("hidden");
+            absenceModalStudentName = null;
+            absenceModalSlotId = null;
+            absenceModalBtnElement = null;
+        }
+
+        function selectAbsenceReason(reason) {
+            if (!absenceModalStudentName || !absenceModalSlotId || !absenceModalBtnElement) {
+                closeAbsenceReasonModal();
+                return;
+            }
+
+            handleStatusClick(absenceModalStudentName, absenceModalSlotId, '결석', absenceModalBtnElement);
+
+            const memoInput = absenceModalBtnElement.parentElement.nextElementSibling
+                ? absenceModalBtnElement.parentElement.nextElementSibling.querySelector('input')
+                : null;
+            if (memoInput) memoInput.value = reason;
+            updateStudentMemo(absenceModalStudentName, absenceModalSlotId, reason);
+
+            closeAbsenceReasonModal();
         }
 
         function renderManagementStudents(teacherName) {
@@ -2044,26 +2223,8 @@
 
             data.students.splice(index, 1);
 
-            Object.keys(attendanceRecords).forEach(weekKey => {
-                const weekRecords = attendanceRecords[weekKey];
-                if (!weekRecords) return;
-                Object.keys(weekRecords).forEach(key => {
-                    if (key === student.name || key.startsWith(`${student.name}__`)) {
-                        delete weekRecords[key];
-                    }
-                });
-            });
-
-            Object.keys(weeklyOverrides).forEach(weekKey => {
-                const wk = weeklyOverrides[weekKey];
-                if (wk && wk[teacherName] && wk[teacherName][student.name]) {
-                    delete wk[teacherName][student.name];
-                }
-            });
-
             saveTeacherData(teacherName);
-            saveDataToSupabase('attendanceRecords', attendanceRecords);
-            saveDataToSupabase('weeklyOverrides', weeklyOverrides);
+            purgeStudentEverywhere(teacherName, student.name);
 
             return student;
         }
@@ -2146,8 +2307,9 @@
             const uniqueStudentNames = [...new Set(recipients.map(r => r.name))];
             const recipientSummary = recipients.map(r => `${r.name}(${typeLabel[r.type] || r.type})`).join(', ');
 
+            const newReservationId = Date.now();
             globalReservations.push({
-                id: Date.now(),
+                id: newReservationId,
                 teacher: getCurrentActiveTeacher(),
                 studentCount: uniqueStudentNames.length,
                 students: uniqueStudentNames,
@@ -2157,7 +2319,7 @@
                 status: '대기중'
             });
 
-            saveDataToSupabase('globalReservations', globalReservations);
+            saveGlobalReservationsMerge([newReservationId]);
 
             alert(`[전송 예약 완료]\n- 대상: ${recipients.length}건 (${recipientSummary})\n- 예약 일시: ${date} ${time}`);
             document.getElementById("sms-msg-content").value = "";
@@ -2253,7 +2415,7 @@
                 smsTemplates[owner].push({ id: String(Date.now()), name: name, content: content });
             }
 
-            saveDataToSupabase('smsTemplates', smsTemplates);
+            saveSmsTemplatesForOwner(owner);
             resetSmsTemplateForm();
             renderSmsTemplateList();
         }
@@ -2266,7 +2428,7 @@
             if (!confirm(`'${tpl.name}' 템플릿을 삭제하시겠습니까?`)) return;
 
             smsTemplates[owner] = list.filter(t => t.id !== id);
-            saveDataToSupabase('smsTemplates', smsTemplates);
+            saveSmsTemplatesForOwner(owner);
             resetSmsTemplateForm();
             renderSmsTemplateList();
         }
@@ -2375,6 +2537,7 @@
             if (!globalReservations || globalReservations.length === 0) return;
             const now = new Date();
             let changed = false;
+            const changedIds = [];
 
             for (const res of globalReservations) {
                 if (res.status !== '대기중') continue;
@@ -2387,6 +2550,7 @@
                     if (!res.dueNotified) {
                         res.dueNotified = true;
                         changed = true;
+                        changedIds.push(res.id);
                         showSmsToast(`⏰ [${res.teacher}T] 예약 시각(${res.reserveAt})이 되었습니다. 문자 API가 연동되면 자동 발송됩니다.`, 'warn');
                     }
                     continue;
@@ -2403,11 +2567,12 @@
                     showSmsToast(`❌ [${res.teacher}T] 문자 발송에 실패했습니다. (사유: ${result.reason}) 잠시 후 다시 시도합니다.`, 'error');
                 }
                 changed = true;
+                changedIds.push(res.id);
             }
 
             if (changed) {
                 renderAdminReservations();
-                saveDataToSupabase('globalReservations', globalReservations);
+                saveGlobalReservationsMerge(changedIds);
             }
         }
 
@@ -2495,7 +2660,7 @@
             if(target) {
                 target.status = newStatus;
                 renderAdminReservations();
-                saveDataToSupabase('globalReservations', globalReservations);
+                saveGlobalReservationsMerge([id]);
             }
         }
 
@@ -2503,7 +2668,7 @@
             if(confirm("이 예약 내역을 취소하시겠습니까?")) {
                 globalReservations = globalReservations.filter(r => r.id !== id);
                 renderAdminReservations();
-                saveDataToSupabase('globalReservations', globalReservations);
+                saveGlobalReservationRemove(id);
             }
         }
 
@@ -2779,7 +2944,7 @@
                 return;
             }
             assignments[key] = roomId;
-            saveDataToSupabase('classroomAssignments', classroomAssignments);
+            saveClassroomAssignment(day, key);
             renderClassroomGrid(day);
         }
 
@@ -2787,7 +2952,7 @@
             if (!isAdminLoggedIn) return;
             if (!classroomAssignments[day]) classroomAssignments[day] = {};
             delete classroomAssignments[day][key];
-            saveDataToSupabase('classroomAssignments', classroomAssignments);
+            saveClassroomAssignment(day, key);
             renderClassroomGrid(day);
         }
 
@@ -2937,7 +3102,7 @@
             const classroomKey = `${teacherName}::${slotId}`;
             if (classroomAssignments[dayKey] && classroomAssignments[dayKey][classroomKey]) {
                 delete classroomAssignments[dayKey][classroomKey];
-                saveDataToSupabase('classroomAssignments', classroomAssignments);
+                saveClassroomAssignment(dayKey, classroomKey);
             }
             renderFullApp(teacherName);
             saveTeacherData(teacherName);
