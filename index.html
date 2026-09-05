@@ -1925,8 +1925,9 @@
             return { status: 'ambiguous', candidates };
         }
 
-        // 삭제 처리: 삭제일은 항상 처리하는 "오늘" 날짜로 기록. 삭제일이 속한 주차까지는
-        // 출석부에 표시되고, 그 다음 주차부터는 isVisibleInWeek()에 의해 자동으로 출석부에서 빠짐.
+        // 삭제 처리: 삭제일은 항상 처리하는 "오늘" 날짜로 기록. isVisibleInWeek()는
+        // weekKey > deletedWeekKey일 때만 숨기므로, 삭제한 이번 주차 출석부부터 바로 빠지게
+        // 하려면 deletedWeekKey를 이번 주차가 아닌 그 전 주차로 기록해야 함.
         // 원생 목록에서는 즉시 사라지지만, 그 전 출석 기록은 그대로 남아있음 (되돌릴 수 없음).
         function softDeleteStudent(teacherName, index) {
             const data = teacherDataStore[teacherName];
@@ -1937,7 +1938,7 @@
             const today = new Date();
             student.status = 'deleted';
             student.deletedAt = getFormattedDate(today);
-            student.deletedWeekKey = computeWeekKeyForDate(today);
+            student.deletedWeekKey = computeWeekKeyForDate(new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000));
 
             saveDataToSupabase('teacherDataStore', teacherDataStore);
 
@@ -2029,7 +2030,7 @@
         }
 
         // 원생 관리 목록의 '삭제' 버튼: 원생 목록에서는 즉시 사라지고,
-        // 다음 주차 출석부부터 이름이 빠진다 (그 전 출석 기록은 남아있음). 되돌릴 수 없음.
+        // 이번 주차 출석부부터 이름이 빠진다 (그 전 출석 기록은 남아있음). 되돌릴 수 없음.
         function handleDeleteStudent(teacherName, index) {
             if (!isAdminLoggedIn) return;
             const data = teacherDataStore[teacherName];
@@ -2037,7 +2038,7 @@
             const student = data.students[index];
             if (!student) return;
 
-            if (!confirm(`${student.name} 학생을 삭제하시겠습니까?\n\n원생 목록에서 즉시 사라지고, 다음 주차 출석부부터 이름이 빠집니다.\n(그 전 출석 기록은 그대로 남아있습니다.)`)) return;
+            if (!confirm(`${student.name} 학생을 삭제하시겠습니까?\n\n원생 목록에서 즉시 사라지고, 이번 주차 출석부부터 이름이 빠집니다.\n(그 전 출석 기록은 그대로 남아있습니다.)`)) return;
 
             softDeleteStudent(teacherName, index);
             refreshAfterStudentListChange(teacherName);
@@ -2052,7 +2053,7 @@
             const student = data.students[index];
             if (!student) return;
 
-            if (!confirm(`${student.name} 학생을 삭제하시겠습니까?\n\n원생 목록에서 즉시 사라지고, 다음 주차 출석부부터 이름이 빠집니다.\n(그 전 출석 기록은 그대로 남아있습니다.)`)) return;
+            if (!confirm(`${student.name} 학생을 삭제하시겠습니까?\n\n원생 목록에서 즉시 사라지고, 이번 주차 출석부부터 이름이 빠집니다.\n(그 전 출석 기록은 그대로 남아있습니다.)`)) return;
 
             softDeleteStudent(teacherName, index);
             refreshAfterStudentListChange(teacherName);
