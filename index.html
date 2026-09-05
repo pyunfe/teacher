@@ -1829,7 +1829,7 @@
                                 </div>
                                 <div class="flex items-center space-x-1 shrink-0 mr-1.5">
                                     <button onclick="handleStatusClick('${s.name}', '${slot.id}', '출석', this)" class="px-2 py-0.5 text-[11px] rounded ${attBtnClass} status-btn">출석</button>
-                                    <button onclick="handleStatusClick('${s.name}', '${slot.id}', '결석', this)" class="px-2 py-0.5 text-[11px] rounded ${absBtnClass} status-btn">결석</button>
+                                    <button onclick="openAbsenceReasonModal('${s.name}', '${slot.id}', this)" class="px-2 py-0.5 text-[11px] rounded ${absBtnClass} status-btn">결석</button>
                                 </div>
                                 <div class="flex-1 min-w-0">
                                     <input type="text" placeholder="비고" value="${rec.memo}"
