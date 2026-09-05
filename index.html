@@ -413,6 +413,8 @@
         var currentSelectedWeek = "";
         var teacherDataStore = {};
         var attendanceRecords = {};
+        // 시간대 박스별 자유 메모(주차별). 구조: { [주차key]: { "강사명::슬롯id": "메모 텍스트" } }
+        var slotFreeMemos = {};
         var globalReservations = [];
         // 개인별(관리자 1명 + 강사 13명) 문자 템플릿. 구조: { [사람이름]: [ {id, name, content}, ... ] }
         var smsTemplates = {};
@@ -506,6 +508,7 @@
                     data.forEach(row => {
                         if (row.id === 'teacherDataStore') teacherDataStore = row.data;
                         if (row.id === 'attendanceRecords') attendanceRecords = row.data;
+                        if (row.id === 'slotFreeMemos') slotFreeMemos = row.data || {};
                         if (row.id === 'globalReservations') globalReservations = row.data;
                         if (row.id === 'weeklyOverrides') weeklyOverrides = row.data;
                         if (row.id === 'smsTemplates') smsTemplates = row.data || {};
@@ -521,6 +524,31 @@
             } catch (err) {
                 console.error("Supabase 데이터 연결 실패:", err);
             }
+        }
+
+        // teacherDataStore는 13명 강사 데이터가 하나의 row에 통째로 들어있어서, 그냥 saveDataToSupabase로
+        // 저장하면 내 브라우저가 실시간 동기화를 놓친 사이(탭 백그라운드 등으로 흔히 발생) 다른 강사가
+        // 그 사이에 저장한 변경사항까지 내 오래된 로컬 복사본으로 덮어써서 롤백시켜버리는 문제가 있었음.
+        // 그래서 저장 직전에 서버 최신본을 다시 읽어와서, 내가 수정한 강사 데이터만 그 위에 얹어 저장한다.
+        async function saveTeacherData(teacherName) {
+            const editedTeacherData = teacherDataStore[teacherName];
+            if (supabaseClient) {
+                try {
+                    const { data, error } = await supabaseClient
+                        .from('app_data')
+                        .select('data')
+                        .eq('id', 'teacherDataStore')
+                        .maybeSingle();
+                    if (!error && data && data.data) {
+                        teacherDataStore = data.data;
+                    }
+                } catch (err) {
+                    console.error("teacherDataStore 최신본 조회 실패:", err);
+                }
+            }
+            teacherDataStore[teacherName] = editedTeacherData;
+            saveDataToSupabase('teacherDataStore', teacherDataStore);
+            refreshCurrentViewSafely();
         }
 
         async function saveDataToSupabase(key, payload) {
@@ -613,6 +641,7 @@
 
             if (row.id === 'teacherDataStore') teacherDataStore = row.data || {};
             else if (row.id === 'attendanceRecords') attendanceRecords = row.data || {};
+            else if (row.id === 'slotFreeMemos') slotFreeMemos = row.data || {};
             else if (row.id === 'globalReservations') globalReservations = row.data || [];
             else if (row.id === 'weeklyOverrides') weeklyOverrides = row.data || {};
             else if (row.id === 'smsTemplates') {
@@ -1098,7 +1127,7 @@
                 saveDataToSupabase('weeklyOverrides', weeklyOverrides);
             } else {
                 sortStudentsAlphabetically(teacherName);
-                saveDataToSupabase('teacherDataStore', teacherDataStore);
+                saveTeacherData(teacherName);
                 saveDataToSupabase('weeklyOverrides', weeklyOverrides);
             }
 
@@ -1354,6 +1383,23 @@
             saveDataToSupabase('attendanceRecords', attendanceRecords);
         }
 
+        // 시간대 박스 하단의 자유 메모(학생과 무관, 주차별로 강사/시간대 박스 단위로 저장)
+        function getSlotFreeMemoKey(teacherName, slotId) {
+            return `${teacherName}::${slotId}`;
+        }
+
+        function getSlotFreeMemo(teacherName, slotId) {
+            const weekMemos = slotFreeMemos[currentSelectedWeek];
+            if (!weekMemos) return '';
+            return weekMemos[getSlotFreeMemoKey(teacherName, slotId)] || '';
+        }
+
+        function updateSlotFreeMemo(teacherName, slotId, memoText) {
+            if (!slotFreeMemos[currentSelectedWeek]) slotFreeMemos[currentSelectedWeek] = {};
+            slotFreeMemos[currentSelectedWeek][getSlotFreeMemoKey(teacherName, slotId)] = memoText;
+            saveDataToSupabase('slotFreeMemos', slotFreeMemos);
+        }
+
         function renderIntegratedFilterBar() {
             const wrapper = document.getElementById("integrated-teacher-filter");
             if (!wrapper) return;
@@ -1459,12 +1505,16 @@
                             studentsHtml = '<div class="text-[11px] text-zinc-400 text-center py-2">학생 없음</div>';
                         }
 
+                        const slotMemoText = getSlotFreeMemo(tName, slot.id);
                         cardsHtml += `
                             <div class="bg-zinc-50/50 p-4 rounded-xl border border-zinc-200" style="grid-column: ${colIdx + 1}; grid-row: ${slotIdx + 1};">
                                 <div class="flex justify-between items-center mb-3">
                                     <span class="text-xs font-bold text-zinc-700 truncate"><span class="text-primary">[${tName}T]</span> ${slot.title} <span class="text-zinc-400 font-semibold">(${slotStudents.length}명)</span></span>
                                 </div>
                                 <div class="space-y-1.5">${studentsHtml}</div>
+                                <textarea placeholder="메모" rows="2"
+                                    oninput="updateSlotFreeMemo('${tName}', '${slot.id}', this.value)"
+                                    class="w-full mt-2 text-[11px] border border-zinc-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary text-zinc-700 bg-white resize-none">${escapeHtml(slotMemoText)}</textarea>
                             </div>
                         `;
                     });
@@ -1538,6 +1588,7 @@
                         `;
                     });
 
+                    const slotMemoText = getSlotFreeMemo(teacherName, slot.id);
                     slotsHtml += `
                         <div class="w-[385px] shrink-0 bg-zinc-50/50 p-4 rounded-xl border border-zinc-200 self-start">
                             <div class="flex justify-between items-center mb-3">
@@ -1545,6 +1596,9 @@
                                 ${isAdminLoggedIn ? `<button onclick="editSlotBox('${teacherName}', '${day}', '${slot.id}')" class="text-[10px] text-zinc-500 hover:text-primary font-semibold shrink-0 ml-2 bg-white px-2 py-1 rounded border border-zinc-200">수정 / 삭제</button>` : ''}
                             </div>
                             <div class="space-y-1.5">${studentsHtml}</div>
+                            <textarea placeholder="메모" rows="2"
+                                oninput="updateSlotFreeMemo('${teacherName}', '${slot.id}', this.value)"
+                                class="w-full mt-2 text-[11px] border border-zinc-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary text-zinc-700 bg-white resize-none">${escapeHtml(slotMemoText)}</textarea>
                         </div>
                     `;
                 });
@@ -1899,7 +1953,7 @@
             }
 
             renderFullApp(teacherName);
-            saveDataToSupabase('teacherDataStore', teacherDataStore);
+            saveTeacherData(teacherName);
             closeStudentModal();
         }
 
@@ -1940,7 +1994,7 @@
             student.deletedAt = getFormattedDate(today);
             student.deletedWeekKey = computeWeekKeyForDate(new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000));
 
-            saveDataToSupabase('teacherDataStore', teacherDataStore);
+            saveTeacherData(teacherName);
 
             return student;
         }
@@ -1963,7 +2017,7 @@
                 student.excludedWeeks.push(currentSelectedWeek);
             }
 
-            saveDataToSupabase('teacherDataStore', teacherDataStore);
+            saveTeacherData(moveModalTeacherName);
 
             const teacherName = moveModalTeacherName;
             closeMoveModal();
@@ -2007,7 +2061,7 @@
                 }
             });
 
-            saveDataToSupabase('teacherDataStore', teacherDataStore);
+            saveTeacherData(teacherName);
             saveDataToSupabase('attendanceRecords', attendanceRecords);
             saveDataToSupabase('weeklyOverrides', weeklyOverrides);
 
@@ -2858,7 +2912,7 @@
             }
 
             renderFullApp(teacherName);
-            saveDataToSupabase('teacherDataStore', teacherDataStore);
+            saveTeacherData(teacherName);
             closeSlotModal();
         }
 
@@ -2886,7 +2940,7 @@
                 saveDataToSupabase('classroomAssignments', classroomAssignments);
             }
             renderFullApp(teacherName);
-            saveDataToSupabase('teacherDataStore', teacherDataStore);
+            saveTeacherData(teacherName);
             closeSlotModal();
         }
     </script>
