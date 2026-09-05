@@ -594,12 +594,35 @@
         }
 
         // 저장이 서버에 다 반영되기 전에 새로고침/탭 닫기를 하면 방금 한 변경이 유실될 수 있어서 경고
+        // (debounceTimers에 아직 남아있는 것도 "저장 안 끝난 상태"로 취급)
         window.addEventListener('beforeunload', (e) => {
-            if (pendingSaveCount > 0) {
+            if (pendingSaveCount > 0 || Object.keys(debounceTimers).length > 0) {
                 e.preventDefault();
                 e.returnValue = '';
             }
         });
+
+        // 비고/메모칸은 글자 하나 칠 때마다 서버 저장을 하면 타이핑이 버벅여서, 입력이 잠시 멈췄을 때만
+        // 실제로 저장하도록 디바운스한다. 화면(로컬 상태)은 즉시 반영되고 네트워크 저장만 늦춰진다.
+        var debounceTimers = {};
+        function debouncedSave(debounceKey, delay, fn) {
+            if (debounceTimers[debounceKey]) clearTimeout(debounceTimers[debounceKey].timer);
+            debounceTimers[debounceKey] = {
+                fn,
+                timer: setTimeout(() => {
+                    delete debounceTimers[debounceKey];
+                    fn();
+                }, delay)
+            };
+        }
+        // 입력칸에서 포커스가 빠져나갈 때(다른 필드 클릭, 탭 전환 등) 기다리지 않고 바로 저장
+        function flushDebouncedSave(debounceKey) {
+            const pending = debounceTimers[debounceKey];
+            if (!pending) return;
+            clearTimeout(pending.timer);
+            delete debounceTimers[debounceKey];
+            pending.fn();
+        }
 
         async function saveTeacherData(teacherName) {
             const editedTeacherData = teacherDataStore[teacherName];
@@ -1586,7 +1609,15 @@
         function updateStudentMemo(studentName, slotId, memoText) {
             const rec = getStudentRecord(studentName, slotId);
             rec.memo = memoText;
-            saveAttendanceRecord(currentSelectedWeek, getRecordKey(studentName, slotId), rec);
+            const weekKey = currentSelectedWeek;
+            const recordKey = getRecordKey(studentName, slotId);
+            debouncedSave(`attendanceRecord::${weekKey}::${recordKey}`, 500, () => {
+                saveAttendanceRecord(weekKey, recordKey, rec);
+            });
+        }
+
+        function flushStudentMemo(studentName, slotId) {
+            flushDebouncedSave(`attendanceRecord::${currentSelectedWeek}::${getRecordKey(studentName, slotId)}`);
         }
 
         // 시간대 박스 하단의 자유 메모(학생과 무관, 주차별로 강사/시간대 박스 단위로 저장)
@@ -1601,7 +1632,15 @@
         }
 
         function updateSlotFreeMemo(teacherName, slotId, memoText) {
-            saveSlotFreeMemo(currentSelectedWeek, getSlotFreeMemoKey(teacherName, slotId), memoText);
+            const weekKey = currentSelectedWeek;
+            const memoKey = getSlotFreeMemoKey(teacherName, slotId);
+            debouncedSave(`slotFreeMemo::${weekKey}::${memoKey}`, 500, () => {
+                saveSlotFreeMemo(weekKey, memoKey, memoText);
+            });
+        }
+
+        function flushSlotFreeMemo(teacherName, slotId) {
+            flushDebouncedSave(`slotFreeMemo::${currentSelectedWeek}::${getSlotFreeMemoKey(teacherName, slotId)}`);
         }
 
         function renderIntegratedFilterBar() {
@@ -1699,6 +1738,7 @@
                                     <div class="flex-1 min-w-0">
                                         <input type="text" placeholder="비고" value="${rec.memo}"
                                             oninput="updateStudentMemo('${s.name}', '${slot.id}', this.value)"
+                                            onblur="flushStudentMemo('${s.name}', '${slot.id}')"
                                             class="w-full text-[11px] border border-zinc-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary text-zinc-700 bg-white">
                                     </div>
                                 </div>
@@ -1718,6 +1758,7 @@
                                 <div class="space-y-1.5">${studentsHtml}</div>
                                 <textarea placeholder="메모" rows="2"
                                     oninput="updateSlotFreeMemo('${tName}', '${slot.id}', this.value)"
+                                    onblur="flushSlotFreeMemo('${tName}', '${slot.id}')"
                                     class="w-full mt-2 text-[11px] border border-amber-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary text-zinc-700 bg-amber-50 resize-none">${escapeHtml(slotMemoText)}</textarea>
                             </div>
                         `;
@@ -1786,6 +1827,7 @@
                                 <div class="flex-1 min-w-0">
                                     <input type="text" placeholder="비고" value="${rec.memo}"
                                         oninput="updateStudentMemo('${s.name}', '${slot.id}', this.value)"
+                                        onblur="flushStudentMemo('${s.name}', '${slot.id}')"
                                         class="w-full text-[11px] border border-zinc-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary text-zinc-700 bg-white">
                                 </div>
                             </div>
@@ -1802,6 +1844,7 @@
                             <div class="space-y-1.5">${studentsHtml}</div>
                             <textarea placeholder="메모" rows="2"
                                 oninput="updateSlotFreeMemo('${teacherName}', '${slot.id}', this.value)"
+                                onblur="flushSlotFreeMemo('${teacherName}', '${slot.id}')"
                                 class="w-full mt-2 text-[11px] border border-amber-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary text-zinc-700 bg-amber-50 resize-none">${escapeHtml(slotMemoText)}</textarea>
                         </div>
                     `;
@@ -1861,6 +1904,7 @@
                 : null;
             if (memoInput) memoInput.value = reason;
             updateStudentMemo(absenceModalStudentName, absenceModalSlotId, reason);
+            flushStudentMemo(absenceModalStudentName, absenceModalSlotId);
 
             closeAbsenceReasonModal();
         }
