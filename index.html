@@ -60,6 +60,7 @@
             <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
                 <h1 class="text-xl font-bold text-primary tracking-tighter">국성티처</h1>
                 <span id="user-badge" class="px-3 py-1 bg-[#802020]/10 text-primary rounded-full text-sm font-medium">강사 모드</span>
+                <span id="save-status-badge" class="hidden px-3 py-1 rounded-full text-sm font-medium"></span>
 
                 <div id="admin-selector-wrapper" class="hidden flex items-center space-x-2">
                     <label class="text-sm text-zinc-600">보기 모드:</label>
@@ -560,131 +561,191 @@
             return null;
         }
 
+        // 같은 key(예: weeklyOverrides)에 대한 "최신본 조회 -> 병합 -> 저장"이 겹쳐서 실행되면,
+        // 나중에 시작했지만 먼저 끝나는 저장이 그 사이 다른 저장 내용을 덮어써버릴 수 있다.
+        // 그래서 key별로 실행 순서를 큐에 넣어 하나씩(이전 저장이 끝난 뒤에) 처리하도록 강제한다.
+        var saveQueues = {};
+        var pendingSaveCount = 0;
+        var saveStatusHideTimer = null;
+        function updateSaveStatusIndicator() {
+            const badge = document.getElementById('save-status-badge');
+            if (!badge) return;
+            if (pendingSaveCount > 0) {
+                if (saveStatusHideTimer) { clearTimeout(saveStatusHideTimer); saveStatusHideTimer = null; }
+                badge.textContent = '반영 중...';
+                badge.className = 'px-3 py-1 rounded-full text-sm font-medium bg-amber-100 text-amber-700';
+            } else {
+                badge.textContent = '반영 완료';
+                badge.className = 'px-3 py-1 rounded-full text-sm font-medium bg-emerald-100 text-emerald-700';
+                saveStatusHideTimer = setTimeout(() => { badge.classList.add('hidden'); }, 1500);
+            }
+        }
+        function enqueueSave(key, taskFn) {
+            pendingSaveCount++;
+            updateSaveStatusIndicator();
+            const run = () => Promise.resolve().then(taskFn).finally(() => {
+                pendingSaveCount--;
+                updateSaveStatusIndicator();
+            });
+            const prev = saveQueues[key] || Promise.resolve();
+            const next = prev.then(run, run);
+            saveQueues[key] = next.catch(err => console.error(`${key} 저장 큐 오류:`, err));
+            return next;
+        }
+
+        // 저장이 서버에 다 반영되기 전에 새로고침/탭 닫기를 하면 방금 한 변경이 유실될 수 있어서 경고
+        window.addEventListener('beforeunload', (e) => {
+            if (pendingSaveCount > 0) {
+                e.preventDefault();
+                e.returnValue = '';
+            }
+        });
+
         async function saveTeacherData(teacherName) {
             const editedTeacherData = teacherDataStore[teacherName];
-            const remote = await fetchLatestRemoteData('teacherDataStore');
-            if (remote) teacherDataStore = remote;
-            teacherDataStore[teacherName] = editedTeacherData;
-            saveDataToSupabase('teacherDataStore', teacherDataStore);
-            refreshCurrentViewSafely();
+            return enqueueSave('teacherDataStore', async () => {
+                const remote = await fetchLatestRemoteData('teacherDataStore');
+                if (remote) teacherDataStore = remote;
+                teacherDataStore[teacherName] = editedTeacherData;
+                await saveDataToSupabase('teacherDataStore', teacherDataStore);
+                refreshCurrentViewSafely();
+            });
         }
 
         // 출석 상태/비고 한 칸(주차+학생+시간대 단위)만 최신본 위에 얹어서 저장
         async function saveAttendanceRecord(weekKey, recordKey, recordValue) {
-            const remote = await fetchLatestRemoteData('attendanceRecords');
-            if (remote) attendanceRecords = remote;
-            if (!attendanceRecords[weekKey]) attendanceRecords[weekKey] = {};
-            attendanceRecords[weekKey][recordKey] = recordValue;
-            saveDataToSupabase('attendanceRecords', attendanceRecords);
-            refreshCurrentViewSafely();
+            return enqueueSave('attendanceRecords', async () => {
+                const remote = await fetchLatestRemoteData('attendanceRecords');
+                if (remote) attendanceRecords = remote;
+                if (!attendanceRecords[weekKey]) attendanceRecords[weekKey] = {};
+                attendanceRecords[weekKey][recordKey] = recordValue;
+                await saveDataToSupabase('attendanceRecords', attendanceRecords);
+                refreshCurrentViewSafely();
+            });
         }
 
         // 시간대 박스 자유 메모 한 칸(주차+강사+슬롯 단위)만 최신본 위에 얹어서 저장
         async function saveSlotFreeMemo(weekKey, memoKey, memoText) {
-            const remote = await fetchLatestRemoteData('slotFreeMemos');
-            if (remote) slotFreeMemos = remote;
-            if (!slotFreeMemos[weekKey]) slotFreeMemos[weekKey] = {};
-            slotFreeMemos[weekKey][memoKey] = memoText;
-            saveDataToSupabase('slotFreeMemos', slotFreeMemos);
-            refreshCurrentViewSafely();
+            return enqueueSave('slotFreeMemos', async () => {
+                const remote = await fetchLatestRemoteData('slotFreeMemos');
+                if (remote) slotFreeMemos = remote;
+                if (!slotFreeMemos[weekKey]) slotFreeMemos[weekKey] = {};
+                slotFreeMemos[weekKey][memoKey] = memoText;
+                await saveDataToSupabase('slotFreeMemos', slotFreeMemos);
+                refreshCurrentViewSafely();
+            });
         }
 
         // 주차별 임시 시간표 이동(weeklyOverrides)은 강사 단위로 최신본 위에 얹어서 저장
         async function saveWeeklyOverridesForTeacher(weekKey, teacherName) {
             const localTeacherWeek = weeklyOverrides[weekKey] ? weeklyOverrides[weekKey][teacherName] : undefined;
-            const remote = await fetchLatestRemoteData('weeklyOverrides');
-            if (remote) weeklyOverrides = remote;
-            if (!weeklyOverrides[weekKey]) weeklyOverrides[weekKey] = {};
-            if (localTeacherWeek === undefined) {
-                delete weeklyOverrides[weekKey][teacherName];
-            } else {
-                weeklyOverrides[weekKey][teacherName] = localTeacherWeek;
-            }
-            saveDataToSupabase('weeklyOverrides', weeklyOverrides);
-            refreshCurrentViewSafely();
+            return enqueueSave('weeklyOverrides', async () => {
+                const remote = await fetchLatestRemoteData('weeklyOverrides');
+                if (remote) weeklyOverrides = remote;
+                if (!weeklyOverrides[weekKey]) weeklyOverrides[weekKey] = {};
+                if (localTeacherWeek === undefined) {
+                    delete weeklyOverrides[weekKey][teacherName];
+                } else {
+                    weeklyOverrides[weekKey][teacherName] = localTeacherWeek;
+                }
+                await saveDataToSupabase('weeklyOverrides', weeklyOverrides);
+                refreshCurrentViewSafely();
+            });
         }
 
         // 학생 완전 제거: 최신본을 다시 받아서 같은 삭제 로직을 그 위에 다시 적용(replay)한다.
         async function purgeStudentEverywhere(teacherName, studentName) {
-            const remoteAttendance = await fetchLatestRemoteData('attendanceRecords');
-            if (remoteAttendance) attendanceRecords = remoteAttendance;
-            Object.keys(attendanceRecords).forEach(weekKey => {
-                const weekRecords = attendanceRecords[weekKey];
-                if (!weekRecords) return;
-                Object.keys(weekRecords).forEach(key => {
-                    if (key === studentName || key.startsWith(`${studentName}__`)) {
-                        delete weekRecords[key];
+            await enqueueSave('attendanceRecords', async () => {
+                const remoteAttendance = await fetchLatestRemoteData('attendanceRecords');
+                if (remoteAttendance) attendanceRecords = remoteAttendance;
+                Object.keys(attendanceRecords).forEach(weekKey => {
+                    const weekRecords = attendanceRecords[weekKey];
+                    if (!weekRecords) return;
+                    Object.keys(weekRecords).forEach(key => {
+                        if (key === studentName || key.startsWith(`${studentName}__`)) {
+                            delete weekRecords[key];
+                        }
+                    });
+                });
+                await saveDataToSupabase('attendanceRecords', attendanceRecords);
+            });
+
+            await enqueueSave('weeklyOverrides', async () => {
+                const remoteOverrides = await fetchLatestRemoteData('weeklyOverrides');
+                if (remoteOverrides) weeklyOverrides = remoteOverrides;
+                Object.keys(weeklyOverrides).forEach(weekKey => {
+                    const wk = weeklyOverrides[weekKey];
+                    if (wk && wk[teacherName] && wk[teacherName][studentName]) {
+                        delete wk[teacherName][studentName];
                     }
                 });
+                await saveDataToSupabase('weeklyOverrides', weeklyOverrides);
             });
-            saveDataToSupabase('attendanceRecords', attendanceRecords);
-
-            const remoteOverrides = await fetchLatestRemoteData('weeklyOverrides');
-            if (remoteOverrides) weeklyOverrides = remoteOverrides;
-            Object.keys(weeklyOverrides).forEach(weekKey => {
-                const wk = weeklyOverrides[weekKey];
-                if (wk && wk[teacherName] && wk[teacherName][studentName]) {
-                    delete wk[teacherName][studentName];
-                }
-            });
-            saveDataToSupabase('weeklyOverrides', weeklyOverrides);
             refreshCurrentViewSafely();
         }
 
         // 개인별 문자 템플릿은 소유자(관리자/강사 이름) 단위로 최신본 위에 얹어서 저장
         async function saveSmsTemplatesForOwner(owner) {
             const localList = smsTemplates[owner];
-            const remote = await fetchLatestRemoteData('smsTemplates');
-            if (remote) smsTemplates = remote;
-            if (localList === undefined) delete smsTemplates[owner];
-            else smsTemplates[owner] = localList;
-            saveDataToSupabase('smsTemplates', smsTemplates);
+            return enqueueSave('smsTemplates', async () => {
+                const remote = await fetchLatestRemoteData('smsTemplates');
+                if (remote) smsTemplates = remote;
+                if (localList === undefined) delete smsTemplates[owner];
+                else smsTemplates[owner] = localList;
+                await saveDataToSupabase('smsTemplates', smsTemplates);
+            });
         }
 
         // 문자 발송 예약 배열은 id로 항목을 지정해서 병합 저장한다.
         // changedIds에 해당하는 항목은 로컬(방금 수정한) 버전을 그대로 살리고, 나머지는 서버 최신본을 따른다.
         async function saveGlobalReservationsMerge(changedIds) {
             const localReservations = globalReservations;
-            const remote = await fetchLatestRemoteData('globalReservations');
-            if (Array.isArray(remote)) {
-                const localById = new Map(localReservations.map(r => [r.id, r]));
-                const merged = remote.map(r => (changedIds.includes(r.id) && localById.has(r.id)) ? localById.get(r.id) : r);
-                localReservations.forEach(r => {
-                    if (changedIds.includes(r.id) && !remote.some(rr => rr.id === r.id)) merged.push(r);
-                });
-                globalReservations = merged;
-            }
-            saveDataToSupabase('globalReservations', globalReservations);
-            refreshCurrentViewSafely();
+            return enqueueSave('globalReservations', async () => {
+                const remote = await fetchLatestRemoteData('globalReservations');
+                if (Array.isArray(remote)) {
+                    const localById = new Map(localReservations.map(r => [r.id, r]));
+                    const merged = remote.map(r => (changedIds.includes(r.id) && localById.has(r.id)) ? localById.get(r.id) : r);
+                    localReservations.forEach(r => {
+                        if (changedIds.includes(r.id) && !remote.some(rr => rr.id === r.id)) merged.push(r);
+                    });
+                    globalReservations = merged;
+                }
+                await saveDataToSupabase('globalReservations', globalReservations);
+                refreshCurrentViewSafely();
+            });
         }
 
         async function saveGlobalReservationRemove(id) {
-            const remote = await fetchLatestRemoteData('globalReservations');
-            if (Array.isArray(remote)) globalReservations = remote;
-            globalReservations = globalReservations.filter(r => r.id !== id);
-            saveDataToSupabase('globalReservations', globalReservations);
-            refreshCurrentViewSafely();
+            return enqueueSave('globalReservations', async () => {
+                const remote = await fetchLatestRemoteData('globalReservations');
+                if (Array.isArray(remote)) globalReservations = remote;
+                globalReservations = globalReservations.filter(r => r.id !== id);
+                await saveDataToSupabase('globalReservations', globalReservations);
+                refreshCurrentViewSafely();
+            });
         }
 
         // 강의실 배정(classroomAssignments)은 요일+배정 키 단위로 최신본 위에 얹어서 저장
         async function saveClassroomAssignment(dayKey, assignKey) {
             const localValue = classroomAssignments[dayKey] ? classroomAssignments[dayKey][assignKey] : undefined;
-            const remote = await fetchLatestRemoteData('classroomAssignments');
-            if (remote) {
-                classroomAssignments = {
-                    friday: remote.friday || {},
-                    saturday: remote.saturday || {},
-                    sunday: remote.sunday || {}
-                };
-            }
-            if (!classroomAssignments[dayKey]) classroomAssignments[dayKey] = {};
-            if (localValue === undefined) {
-                delete classroomAssignments[dayKey][assignKey];
-            } else {
-                classroomAssignments[dayKey][assignKey] = localValue;
-            }
-            saveDataToSupabase('classroomAssignments', classroomAssignments);
-            refreshCurrentViewSafely();
+            return enqueueSave('classroomAssignments', async () => {
+                const remote = await fetchLatestRemoteData('classroomAssignments');
+                if (remote) {
+                    classroomAssignments = {
+                        friday: remote.friday || {},
+                        saturday: remote.saturday || {},
+                        sunday: remote.sunday || {}
+                    };
+                }
+                if (!classroomAssignments[dayKey]) classroomAssignments[dayKey] = {};
+                if (localValue === undefined) {
+                    delete classroomAssignments[dayKey][assignKey];
+                } else {
+                    classroomAssignments[dayKey][assignKey] = localValue;
+                }
+                await saveDataToSupabase('classroomAssignments', classroomAssignments);
+                refreshCurrentViewSafely();
+            });
         }
 
         async function saveDataToSupabase(key, payload) {
@@ -1657,7 +1718,7 @@
                                 <div class="space-y-1.5">${studentsHtml}</div>
                                 <textarea placeholder="메모" rows="2"
                                     oninput="updateSlotFreeMemo('${tName}', '${slot.id}', this.value)"
-                                    class="w-full mt-2 text-[11px] border border-zinc-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary text-zinc-700 bg-white resize-none">${escapeHtml(slotMemoText)}</textarea>
+                                    class="w-full mt-2 text-[11px] border border-amber-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary text-zinc-700 bg-amber-50 resize-none">${escapeHtml(slotMemoText)}</textarea>
                             </div>
                         `;
                     });
@@ -1741,7 +1802,7 @@
                             <div class="space-y-1.5">${studentsHtml}</div>
                             <textarea placeholder="메모" rows="2"
                                 oninput="updateSlotFreeMemo('${teacherName}', '${slot.id}', this.value)"
-                                class="w-full mt-2 text-[11px] border border-zinc-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary text-zinc-700 bg-white resize-none">${escapeHtml(slotMemoText)}</textarea>
+                                class="w-full mt-2 text-[11px] border border-amber-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary text-zinc-700 bg-amber-50 resize-none">${escapeHtml(slotMemoText)}</textarea>
                         </div>
                     `;
                 });
