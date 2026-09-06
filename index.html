@@ -206,7 +206,7 @@
                         <p class="text-sm text-zinc-500">대상자를 선택하고 발송할 내용을 작성한 뒤 예약 설정을 진행하세요.</p>
                     </div>
                     <div class="space-x-2 flex items-center">
-                        <button onclick="openAddStudentModal()" class="bg-zinc-800 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-zinc-900 transition">+ 원생 신규 등록</button>
+                        <button id="add-student-btn" onclick="openAddStudentModal()" class="hidden bg-zinc-800 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-zinc-900 transition">+ 원생 신규 등록</button>
                     </div>
                 </div>
 
@@ -678,12 +678,22 @@
             pending.fn();
         }
 
-        async function saveTeacherData(teacherName) {
+        // teacherName의 데이터를 저장한다. applyPatch가 주어지면 "지금 로컬에서 바꾼 것과 정확히 같은 의미의
+        // 변경"을 서버 최신본 위에 다시 적용(replay)한 뒤 저장한다. 이렇게 해야 이 브라우저 탭이 한동안
+        // 최신 상태를 못 받아본 사이(백그라운드, 오래 켜둔 탭 등) 다른 곳에서 이미 반영된 변경(예: 퇴원 처리)을
+        // "그 강사 데이터 전체를 옛 스냅샷으로 덮어쓰는" 방식으로 되돌리는 사고를 막을 수 있다.
+        // applyPatch를 안 넘기면(레거시 호출) 예전처럼 로컬 스냅샷을 그대로 얹는다.
+        async function saveTeacherData(teacherName, applyPatch) {
             const editedTeacherData = teacherDataStore[teacherName];
             return enqueueSave('teacherDataStore', async () => {
                 const remote = await fetchLatestRemoteData('teacherDataStore');
                 if (remote) teacherDataStore = remote;
-                teacherDataStore[teacherName] = editedTeacherData;
+                if (applyPatch) {
+                    if (!teacherDataStore[teacherName]) initDefaultTeacherData(teacherName);
+                    applyPatch(teacherDataStore[teacherName]);
+                } else {
+                    teacherDataStore[teacherName] = editedTeacherData;
+                }
                 await saveDataToSupabase('teacherDataStore', teacherDataStore);
                 refreshCurrentViewSafely();
             });
@@ -939,6 +949,33 @@
             refreshCurrentViewSafely();
         }
 
+        // ===== 백그라운드로 넘어갔던 탭이 다시 활성화될 때 전체 데이터 재동기화 =====
+        // 모바일에서 앱을 전환하거나 화면을 끄면 브라우저가 실시간 구독(웹소켓)을 끊어버리는 경우가 많아서,
+        // 그 사이(예: 미니윤철 run.bat이 학생을 퇴원 처리하는 등) 서버에서 일어난 변경을 못 받는다.
+        // 이 상태에서 아무 저장 동작(예: 출석 체크)을 하면 saveTeacherData가 "최신본을 받아온 뒤 이 강사
+        // 데이터를 통째로 덮어쓰는" 방식이라, 브라우저가 들고 있던 옛 데이터(예: 퇴원 처리 되돌아가기 전)로
+        // 그대로 되돌려버리는 문제가 있었음. 탭이 다시 보이거나 포커스를 되찾을 때 전체를 새로 받아와서
+        // 이 문제를 예방한다.
+        var isResyncingOnForeground = false;
+        async function resyncOnForeground() {
+            if (isResyncingOnForeground) return;
+            if (document.getElementById("app-screen").classList.contains('hidden')) return; // 로그인 전이면 스킵
+            isResyncingOnForeground = true;
+            try {
+                await loadDataFromSupabase();
+                refreshCurrentViewSafely();
+            } catch (err) {
+                console.error('포그라운드 복귀 재동기화 실패:', err);
+            } finally {
+                isResyncingOnForeground = false;
+            }
+        }
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') resyncOnForeground();
+        });
+        window.addEventListener('focus', resyncOnForeground);
+
         // 비고 등 텍스트 입력 중에는 커서가 튀지 않도록 즉시 다시 그리지 않고, 입력을 마친(blur) 후에 반영
         function isTypingInTextField() {
             const el = document.activeElement;
@@ -1024,6 +1061,10 @@
             isAdminLoggedIn = isAdmin;
             currentLoginIdentity = identity;
             const adminResBtn = document.getElementById("tab-admin-reservations-btn");
+
+            // 원생 신규 등록은 관리자만 가능 (강사 모드에서는 실수로 중복/오등록되는 것을 막기 위해 숨김)
+            const addStudentBtn = document.getElementById("add-student-btn");
+            if (addStudentBtn) addStudentBtn.classList.toggle("hidden", !isAdmin);
 
             if (isAdmin) {
                 document.getElementById("user-badge").innerText = "관리자 모드 (전체 권한)";
@@ -1455,7 +1496,16 @@
                 saveWeeklyOverridesForTeacher(currentSelectedWeek, teacherName);
             } else {
                 sortStudentsAlphabetically(teacherName);
-                saveTeacherData(teacherName);
+                const slotIdsToApply = checkedIds.slice();
+                saveTeacherData(teacherName, (freshData) => {
+                    targetNames.forEach(name => {
+                        const target = freshData.students.find(s => s.name === name);
+                        if (!target) return;
+                        target.slotIds = slotIdsToApply.slice();
+                        delete target.slotId;
+                    });
+                    freshData.students.sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+                });
                 saveWeeklyOverridesForTeacher(currentSelectedWeek, teacherName);
             }
 
@@ -2291,8 +2341,10 @@
         var studentModalMode = null; // 'add' | 'edit'
         var studentModalTeacherName = null;
         var studentModalEditIndex = null;
+        var studentModalOriginalName = null; // 수정 모드 진입 시점의 원래 이름(저장 시 최신본에서 이 이름으로 다시 찾기 위함)
 
         function openAddStudentModal() {
+            if (!isAdminLoggedIn) return;
             const currentTeacher = getCurrentActiveTeacher();
             if (currentTeacher === "통합출석부") {
                 alert("통합출석부 모드에서는 학생을 등록할 수 없습니다.");
@@ -2322,6 +2374,7 @@
 
             const student = (mode === 'edit') ? data.students[index] : null;
             if (mode === 'edit' && !student) return;
+            studentModalOriginalName = student ? student.name : null;
 
             document.getElementById("student-modal-title").innerText = mode === 'edit'
                 ? `학생 정보 수정 - ${student.name} (${teacherName}T)`
@@ -2399,6 +2452,7 @@
             studentModalMode = null;
             studentModalTeacherName = null;
             studentModalEditIndex = null;
+            studentModalOriginalName = null;
         }
 
         function saveStudentModal() {
@@ -2425,9 +2479,11 @@
                 return;
             }
 
+            let applyPatch;
             if (studentModalMode === 'edit') {
                 const student = data.students[studentModalEditIndex];
                 if (!student) return;
+                const originalName = studentModalOriginalName;
                 student.name = name;
                 student.school = school;
                 student.phone = phone;
@@ -2436,13 +2492,30 @@
                 student.registeredAt = registeredAt;
                 student.firstWeekKey = firstWeekKey;
                 delete student.slotId;
+
+                applyPatch = (freshData) => {
+                    const target = freshData.students.find(s => s.name === originalName);
+                    if (!target) return;
+                    target.name = name;
+                    target.school = school;
+                    target.phone = phone;
+                    target.parentPhone = parentPhone;
+                    target.slotIds = chosenIds;
+                    target.registeredAt = registeredAt;
+                    target.firstWeekKey = firstWeekKey;
+                    delete target.slotId;
+                };
             } else {
                 // 등록일 입력값(없으면 오늘) 기준으로 firstWeekKey/registeredAt 저장 -> 그 날짜가 속한 주차부터 출석부에 표시
                 data.students.push({ name, school, phone, parentPhone, slotIds: chosenIds, firstWeekKey: firstWeekKey, registeredAt: registeredAt });
+
+                applyPatch = (freshData) => {
+                    freshData.students.push({ name, school, phone, parentPhone, slotIds: chosenIds, firstWeekKey: firstWeekKey, registeredAt: registeredAt });
+                };
             }
 
             renderFullApp(teacherName);
-            saveTeacherData(teacherName);
+            saveTeacherData(teacherName, applyPatch);
             closeStudentModal();
         }
 
@@ -2479,11 +2552,21 @@
             if (!student) return null;
 
             const today = new Date();
-            student.status = 'deleted';
-            student.deletedAt = getFormattedDate(today);
-            student.deletedWeekKey = computeWeekKeyForDate(new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000));
+            const deletedAt = getFormattedDate(today);
+            const deletedWeekKey = computeWeekKeyForDate(new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000));
+            const studentName = student.name;
 
-            saveTeacherData(teacherName);
+            student.status = 'deleted';
+            student.deletedAt = deletedAt;
+            student.deletedWeekKey = deletedWeekKey;
+
+            saveTeacherData(teacherName, (freshData) => {
+                const target = freshData.students.find(s => s.name === studentName && s.status !== 'deleted');
+                if (!target) return;
+                target.status = 'deleted';
+                target.deletedAt = deletedAt;
+                target.deletedWeekKey = deletedWeekKey;
+            });
 
             return student;
         }
@@ -2506,7 +2589,14 @@
                 student.excludedWeeks.push(currentSelectedWeek);
             }
 
-            saveTeacherData(moveModalTeacherName);
+            const studentName = moveModalStudentName;
+            const weekToExclude = currentSelectedWeek;
+            saveTeacherData(moveModalTeacherName, (freshData) => {
+                const target = freshData.students.find(s => s.name === studentName);
+                if (!target) return;
+                if (!Array.isArray(target.excludedWeeks)) target.excludedWeeks = [];
+                if (!target.excludedWeeks.includes(weekToExclude)) target.excludedWeeks.push(weekToExclude);
+            });
 
             const teacherName = moveModalTeacherName;
             closeMoveModal();
@@ -2531,10 +2621,14 @@
             const student = data.students[index];
             if (!student) return null;
 
+            const studentName = student.name;
             data.students.splice(index, 1);
 
-            saveTeacherData(teacherName);
-            purgeStudentEverywhere(teacherName, student.name);
+            saveTeacherData(teacherName, (freshData) => {
+                const idx = freshData.students.findIndex(s => s.name === studentName);
+                if (idx !== -1) freshData.students.splice(idx, 1);
+            });
+            purgeStudentEverywhere(teacherName, studentName);
 
             return student;
         }
@@ -3422,20 +3516,41 @@
                 return;
             }
 
+            let applyPatch;
             if (slotModalMode === 'add') {
                 if (!teacherDataStore[teacherName]) initDefaultTeacherData(teacherName);
                 const newId = 'slot-' + dayKey + '-' + Date.now();
                 teacherDataStore[teacherName].slots[dayKey].push({ id: newId, title: title });
+                applyPatch = (freshData) => {
+                    freshData.slots[dayKey].push({ id: newId, title: title });
+                };
             } else if (slotModalMode === 'edit') {
                 const data = teacherDataStore[teacherName];
                 const slot = data.slots[dayKey].find(s => s.id === slotModalSlotId);
                 if (!slot) return;
                 slot.title = title;
+                const slotId = slotModalSlotId;
+                applyPatch = (freshData) => {
+                    const target = freshData.slots[dayKey].find(s => s.id === slotId);
+                    if (target) target.title = title;
+                };
             }
 
             renderFullApp(teacherName);
-            saveTeacherData(teacherName);
+            saveTeacherData(teacherName, applyPatch);
             closeSlotModal();
+        }
+
+        // 슬롯(반) 삭제 로직을 로컬 데이터와 서버 최신본 양쪽에 동일하게 적용하기 위한 공통 함수.
+        // slotId는 고유하므로 이 로직은 어떤 시점의 데이터에 적용해도 결과가 같다(재적용 안전).
+        function applySlotDeletion(data, dayKey, slotId) {
+            data.slots[dayKey] = data.slots[dayKey].filter(s => s.id !== slotId);
+            data.students.forEach(s => {
+                const ids = getStudentSlotIds(s).filter(id => id !== slotId);
+                s.slotIds = ids;
+                delete s.slotId;
+            });
+            data.students = data.students.filter(s => s.slotIds.length > 0);
         }
 
         function deleteSlotModalItem() {
@@ -3448,13 +3563,7 @@
 
             if (!confirm(`정말 "${slot.title}" 박스를 삭제하시겠습니까?\n이 시간대에만 등록된 학생은 목록에서 함께 퇴장 되고, 다른 시간표에는 등록된 학생은 그 시간표에 그대로 남습니다.`)) return;
 
-            data.slots[dayKey] = data.slots[dayKey].filter(s => s.id !== slotId);
-            data.students.forEach(s => {
-                const ids = getStudentSlotIds(s).filter(id => id !== slotId);
-                s.slotIds = ids;
-                delete s.slotId;
-            });
-            data.students = data.students.filter(s => s.slotIds.length > 0);
+            applySlotDeletion(data, dayKey, slotId);
             // 삭제된 반이 강의실에 배정되어 있었다면 배정 정보도 함께 정리
             const classroomKey = `${teacherName}::${slotId}`;
             if (classroomAssignments[dayKey] && classroomAssignments[dayKey][classroomKey]) {
@@ -3462,7 +3571,7 @@
                 saveClassroomAssignment(dayKey, classroomKey);
             }
             renderFullApp(teacherName);
-            saveTeacherData(teacherName);
+            saveTeacherData(teacherName, (freshData) => applySlotDeletion(freshData, dayKey, slotId));
             closeSlotModal();
         }
     </script>
