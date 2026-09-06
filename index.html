@@ -36,6 +36,8 @@
         .horizontal-scroll-container::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
         .horizontal-scroll-container { -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain; }
 
+        #label-friday, #label-saturday, #label-sunday { scroll-margin-top: 96px; }
+
         /* ===== 모바일(폰/태블릿) 터치 최적화 =====
            - 손가락 터치 기기(coarse pointer)에서만 적용, 마우스로 쓰는 PC/랩탑은 기존 그대로 둔다.
            - 입력창 글자 크기를 16px 미만으로 두면 iOS Safari가 포커스 시 자동으로 화면을 확대해버려서
@@ -301,7 +303,14 @@
 
         </main>
 
-        <div id="integrated-teacher-filter" class="hidden flex-col items-stretch gap-2 bg-white border border-zinc-200 rounded-2xl p-3 shadow-lg fixed right-2 md:right-4 top-1/2 -translate-y-1/2 z-30">
+        <div id="right-side-panel" class="fixed right-2 md:right-4 top-1/2 -translate-y-1/2 z-30 flex flex-col items-end gap-3">
+            <div id="integrated-teacher-filter" class="hidden flex-col items-stretch gap-2 bg-white border border-zinc-200 rounded-2xl p-3 shadow-lg">
+            </div>
+            <div id="day-quick-nav" class="flex flex-col gap-2">
+                <button onclick="scrollToDaySection('friday')" class="w-10 h-10 md:w-12 md:h-12 rounded-full bg-white border border-zinc-200 shadow-md text-primary font-bold text-sm hover:bg-primary hover:text-white transition flex items-center justify-center">금</button>
+                <button onclick="scrollToDaySection('saturday')" class="w-10 h-10 md:w-12 md:h-12 rounded-full bg-white border border-zinc-200 shadow-md text-primary font-bold text-sm hover:bg-primary hover:text-white transition flex items-center justify-center">토</button>
+                <button onclick="scrollToDaySection('sunday')" class="w-10 h-10 md:w-12 md:h-12 rounded-full bg-white border border-zinc-200 shadow-md text-primary font-bold text-sm hover:bg-primary hover:text-white transition flex items-center justify-center">일</button>
+            </div>
         </div>
     </div>
 
@@ -3429,6 +3438,9 @@
             if(classroomSec) classroomSec.classList.add("hidden");
             if(adminResSec) adminResSec.classList.add("hidden");
 
+            const dayQuickNav = document.getElementById("day-quick-nav");
+            if (dayQuickNav) dayQuickNav.classList.toggle("hidden", tabName !== 'attendance');
+
             if (tabName === 'attendance') {
                 setActive(attBtn, true);
                 attSec.classList.remove("hidden");
@@ -3448,6 +3460,11 @@
                 adminResSec.classList.remove("hidden");
                 renderAdminReservations();
             }
+        }
+
+        function scrollToDaySection(dayKey) {
+            const el = document.getElementById("label-" + dayKey);
+            if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
         }
 
         function addSlotBoxPrompt() {
