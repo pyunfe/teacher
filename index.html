@@ -301,7 +301,7 @@
 
         </main>
 
-        <div id="integrated-teacher-filter" class="hidden flex-col items-stretch gap-1 bg-white border border-zinc-200 rounded-xl p-1.5 shadow-lg fixed right-2 md:right-4 top-1/2 -translate-y-1/2 z-30">
+        <div id="integrated-teacher-filter" class="hidden flex-col items-stretch gap-2 bg-white border border-zinc-200 rounded-2xl p-3 shadow-lg fixed right-2 md:right-4 top-1/2 -translate-y-1/2 z-30">
         </div>
     </div>
 
@@ -1793,13 +1793,13 @@
         function renderIntegratedFilterBar() {
             const wrapper = document.getElementById("integrated-teacher-filter");
             if (!wrapper) return;
-            const label = `<div class="px-2 pb-1 text-[10px] font-bold text-zinc-400">학년 필터</div>`;
+            const label = `<div class="px-3 pb-1 text-xs font-bold text-zinc-400">학년 필터</div>`;
             const buttons = INTEGRATED_TEACHER_GROUPS.map(g => {
                 const active = g.key === integratedTeacherFilterKey;
                 const cls = active
                     ? "bg-primary text-white font-bold"
                     : "bg-white text-zinc-600 hover:bg-zinc-100 font-semibold";
-                return `<button onclick="setIntegratedTeacherFilter('${g.key}')" class="w-full text-left whitespace-nowrap px-3 py-1.5 text-xs rounded-lg transition ${cls}">${g.label}</button>`;
+                return `<button onclick="setIntegratedTeacherFilter('${g.key}')" class="w-full text-left whitespace-nowrap px-6 py-3 text-base rounded-xl transition ${cls}">${g.label}</button>`;
             }).join("");
             wrapper.innerHTML = label + buttons;
         }
@@ -1946,6 +1946,8 @@
 
             ['friday', 'saturday', 'sunday'].forEach(day => {
                 const rowContainer = document.getElementById(`row-${day}`);
+                const prevScrollEl = rowContainer.querySelector('.horizontal-scroll-container');
+                const prevScrollLeft = prevScrollEl ? prevScrollEl.scrollLeft : 0;
                 rowContainer.innerHTML = "";
                 const daySlots = getSortedSlots(data.slots[day] || []);
 
@@ -2008,6 +2010,9 @@
                 });
                 slotsHtml += `</div></div>`;
                 rowContainer.innerHTML = slotsHtml;
+
+                const newScrollEl = rowContainer.querySelector('.horizontal-scroll-container');
+                if (newScrollEl && prevScrollLeft) newScrollEl.scrollLeft = prevScrollLeft;
             });
 
             applyAttendanceSearchFilter();
