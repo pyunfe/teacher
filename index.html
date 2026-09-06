@@ -82,45 +82,49 @@
     </div>
 
     <div id="app-screen" class="hidden min-h-screen flex flex-col">
-        <header class="bg-white border-b border-zinc-200 px-4 md:px-6 py-3 md:py-4 flex flex-wrap gap-3 justify-between items-center sticky top-0 z-40">
-            <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
-                <h1 onclick="location.reload()" class="text-xl font-bold text-primary tracking-tighter cursor-pointer select-none" title="새로고침">국성티처</h1>
-                <span id="user-badge" class="px-3 py-1 bg-[#802020]/10 text-primary rounded-full text-sm font-medium">강사 모드</span>
-                <span id="save-status-badge" class="hidden px-3 py-1 rounded-full text-sm font-medium"></span>
+        <header class="bg-white border-b border-zinc-200 px-4 md:px-6 py-3 md:py-4 flex flex-col gap-3 md:flex-row md:flex-wrap md:justify-between md:items-center sticky top-0 z-40">
+            <div class="flex items-start justify-between gap-3 md:items-center md:justify-start md:flex-wrap md:gap-x-4 md:gap-y-2">
+                <div class="flex flex-wrap items-center gap-x-4 gap-y-2 min-w-0">
+                    <h1 onclick="location.reload()" class="text-xl font-bold text-primary tracking-tighter cursor-pointer select-none shrink-0" title="새로고침">국성티처</h1>
+                    <span id="user-badge" class="px-3 py-1 bg-[#802020]/10 text-primary rounded-full text-sm font-medium whitespace-nowrap">강사 모드</span>
+                    <span id="save-status-badge" class="hidden px-3 py-1 rounded-full text-sm font-medium whitespace-nowrap"></span>
 
-                <div id="admin-selector-wrapper" class="hidden flex items-center space-x-2">
-                    <label class="text-sm text-zinc-600">보기 모드:</label>
-                    <select id="teacher-select" onchange="changeTeacher(this.value)" class="border border-zinc-300 rounded-lg px-3 py-1 text-sm bg-zinc-50 focus:outline-none focus:ring-1 focus:ring-primary">
-                        <option value="통합출석부">🔗 전체 통합 출석부 (관리자 전용)</option>
-                        <option value="황성웅">황성웅T</option>
-                        <optgroup label="중등부">
-                            <option value="정다운">정다운T</option>
-                            <option value="김신형">김신형T</option>
-                            <option value="문지현">문지현T</option>
-                        </optgroup>
-                        <optgroup label="고등부">
-                            <option value="강윤지">강윤지T</option>
-                            <option value="이현영">이현영T</option>
-                            <option value="김명일">김명일T</option>
-                            <option value="김준영">김준영T</option>
-                            <option value="박신언">박신언T</option>
-                            <option value="윤태민">윤태민T</option>
-                            <option value="고광준">고광준T</option>
-                            <option value="이영찬">이영찬T</option>
-                            <option value="오세현">오세현T</option>
-                        </optgroup>
-                    </select>
+                    <div id="admin-selector-wrapper" class="hidden flex items-center space-x-2">
+                        <label class="text-sm text-zinc-600 shrink-0">보기 모드:</label>
+                        <select id="teacher-select" onchange="changeTeacher(this.value)" class="border border-zinc-300 rounded-lg px-3 py-1 text-sm bg-zinc-50 focus:outline-none focus:ring-1 focus:ring-primary">
+                            <option value="통합출석부">🔗 전체 통합 출석부 (관리자 전용)</option>
+                            <option value="황성웅">황성웅T</option>
+                            <optgroup label="중등부">
+                                <option value="정다운">정다운T</option>
+                                <option value="김신형">김신형T</option>
+                                <option value="문지현">문지현T</option>
+                            </optgroup>
+                            <optgroup label="고등부">
+                                <option value="강윤지">강윤지T</option>
+                                <option value="이현영">이현영T</option>
+                                <option value="김명일">김명일T</option>
+                                <option value="김준영">김준영T</option>
+                                <option value="박신언">박신언T</option>
+                                <option value="윤태민">윤태민T</option>
+                                <option value="고광준">고광준T</option>
+                                <option value="이영찬">이영찬T</option>
+                                <option value="오세현">오세현T</option>
+                            </optgroup>
+                        </select>
+                    </div>
                 </div>
+
+                <button onclick="handleLogout()" class="md:hidden shrink-0 text-sm text-red-500 hover:underline">로그아웃</button>
             </div>
 
-            <div class="flex flex-wrap items-center gap-x-6 gap-y-2">
-                <nav class="flex flex-wrap gap-2">
-                    <button onclick="switchTab('attendance')" id="tab-attendance-btn" class="px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm md:text-base font-semibold bg-primary text-white transition">출석부</button>
-                    <button onclick="switchTab('classroom')" id="tab-classroom-btn" class="px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm md:text-base font-semibold text-zinc-600 hover:bg-zinc-100 transition">강의실 배정표</button>
-                    <button onclick="switchTab('management')" id="tab-management-btn" class="px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm md:text-base font-semibold text-zinc-600 hover:bg-zinc-100 transition">원생 관리</button>
-                    <button onclick="switchTab('admin-reservations')" id="tab-admin-reservations-btn" class="px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm md:text-base font-semibold text-zinc-600 hover:bg-zinc-100 transition">발송 예약 관리</button>
+            <div class="flex items-center gap-x-6 gap-y-2 md:flex-wrap md:ml-auto">
+                <nav class="grid grid-cols-4 gap-1.5 w-full md:flex md:w-auto md:flex-wrap md:gap-2">
+                    <button onclick="switchTab('attendance')" id="tab-attendance-btn" class="px-1.5 md:px-4 py-1.5 md:py-2 rounded-lg text-[11px] md:text-base font-semibold bg-primary text-white transition truncate">출석부</button>
+                    <button onclick="switchTab('classroom')" id="tab-classroom-btn" class="px-1.5 md:px-4 py-1.5 md:py-2 rounded-lg text-[11px] md:text-base font-semibold text-zinc-600 hover:bg-zinc-100 transition truncate"><span class="hidden md:inline">강의실 배정표</span><span class="md:hidden">배정표</span></button>
+                    <button onclick="switchTab('management')" id="tab-management-btn" class="px-1.5 md:px-4 py-1.5 md:py-2 rounded-lg text-[11px] md:text-base font-semibold text-zinc-600 hover:bg-zinc-100 transition truncate">원생 관리</button>
+                    <button onclick="switchTab('admin-reservations')" id="tab-admin-reservations-btn" class="px-1.5 md:px-4 py-1.5 md:py-2 rounded-lg text-[11px] md:text-base font-semibold text-zinc-600 hover:bg-zinc-100 transition truncate"><span class="hidden md:inline">발송 예약 관리</span><span class="md:hidden">예약 관리</span></button>
                 </nav>
-                <button onclick="handleLogout()" class="text-sm text-red-500 hover:underline">로그아웃</button>
+                <button onclick="handleLogout()" class="hidden md:inline shrink-0 text-sm text-red-500 hover:underline">로그아웃</button>
             </div>
         </header>
 
@@ -222,12 +226,12 @@
                                 <button onclick="selectAllRecipients('none')" class="text-[11px] text-zinc-400 hover:text-rose-600 px-2 py-1 rounded-lg font-semibold transition">선택 해제</button>
                             </div>
                         </div>
-                        <div class="pb-1 flex items-center space-x-1.5">
-                            <input type="text" id="management-search-input" oninput="handleManagementSearch(this.value)" placeholder="이름으로 검색..." class="flex-1 border border-zinc-300 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary">
-                            <select id="management-teacher-filter" onchange="handleManagementTeacherFilter(this.value)" class="hidden border border-zinc-300 rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-primary max-w-[100px]">
+                        <div class="pb-1 flex flex-wrap items-center gap-1.5">
+                            <input type="text" id="management-search-input" oninput="handleManagementSearch(this.value)" placeholder="이름으로 검색..." class="w-full sm:flex-1 sm:w-auto min-w-0 border border-zinc-300 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary">
+                            <select id="management-teacher-filter" onchange="handleManagementTeacherFilter(this.value)" class="hidden flex-1 sm:flex-none min-w-0 border border-zinc-300 rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-primary sm:max-w-[100px]">
                                 <option value="">전체 강사</option>
                             </select>
-                            <select id="management-school-filter" onchange="handleManagementSchoolFilter(this.value)" class="border border-zinc-300 rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-primary max-w-[110px]">
+                            <select id="management-school-filter" onchange="handleManagementSchoolFilter(this.value)" class="flex-1 sm:flex-none min-w-0 border border-zinc-300 rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-primary sm:max-w-[110px]">
                                 <option value="">전체 학교</option>
                             </select>
                         </div>
@@ -248,9 +252,9 @@
                         </div>
                         <div class="space-y-1">
                             <label class="text-xs font-semibold text-zinc-600">예약 일시 선택</label>
-                            <div class="grid grid-cols-2 gap-3">
-                                <input type="date" id="reserve-date" class="border border-zinc-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary text-zinc-700">
-                                <input type="time" id="reserve-time" class="border border-zinc-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary text-zinc-700">
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <input type="date" id="reserve-date" class="w-full min-w-0 border border-zinc-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary text-zinc-700">
+                                <input type="time" id="reserve-time" class="w-full min-w-0 border border-zinc-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary text-zinc-700">
                             </div>
                         </div>
                         <button onclick="handleSmsReservation()" class="w-full bg-primary text-white py-3 rounded-xl font-semibold hover:bg-primary-hover transition shadow-sm">
@@ -3226,10 +3230,20 @@
             const classroomSec = document.getElementById("tab-classroom");
             const adminResSec = document.getElementById("tab-admin-reservations");
 
-            attBtn.className = "px-4 py-2 rounded-lg font-semibold text-zinc-600 hover:bg-zinc-100 transition";
-            mngBtn.className = "px-4 py-2 rounded-lg font-semibold text-zinc-600 hover:bg-zinc-100 transition";
-            if(classroomBtn) classroomBtn.className = "px-4 py-2 rounded-lg font-semibold text-zinc-600 hover:bg-zinc-100 transition";
-            if(adminResBtn) adminResBtn.className = "px-4 py-2 rounded-lg font-semibold text-zinc-600 hover:bg-zinc-100 transition";
+            // 버튼의 className을 통째로 덮어쓰면 반응형(모바일 크기/문구) 클래스까지 같이 날아가버리므로,
+            // 활성/비활성 상태를 나타내는 클래스만 classList로 토글한다.
+            const activeClasses = ["bg-primary", "text-white"];
+            const inactiveClasses = ["text-zinc-600", "hover:bg-zinc-100"];
+            const setActive = (btn, isActive) => {
+                if (!btn) return;
+                btn.classList.remove(...activeClasses, ...inactiveClasses);
+                btn.classList.add(...(isActive ? activeClasses : inactiveClasses));
+            };
+
+            setActive(attBtn, false);
+            setActive(mngBtn, false);
+            setActive(classroomBtn, false);
+            setActive(adminResBtn, false);
 
             attSec.classList.add("hidden");
             mngSec.classList.add("hidden");
@@ -3237,21 +3251,21 @@
             if(adminResSec) adminResSec.classList.add("hidden");
 
             if (tabName === 'attendance') {
-                attBtn.className = "px-4 py-2 rounded-lg font-semibold bg-primary text-white transition";
+                setActive(attBtn, true);
                 attSec.classList.remove("hidden");
                 const currentVal = getCurrentActiveTeacher();
                 if(currentVal === "통합출석부") renderIntegratedTimetable();
                 else renderTimetableAndSlots(currentVal);
             } else if (tabName === 'management') {
-                mngBtn.className = "px-4 py-2 rounded-lg font-semibold bg-primary text-white transition";
+                setActive(mngBtn, true);
                 mngSec.classList.remove("hidden");
                 renderManagementStudents(getCurrentActiveTeacher());
             } else if (tabName === 'classroom') {
-                if(classroomBtn) classroomBtn.className = "px-4 py-2 rounded-lg font-semibold bg-primary text-white transition";
+                setActive(classroomBtn, true);
                 if(classroomSec) classroomSec.classList.remove("hidden");
                 renderClassroomTab();
             } else if (tabName === 'admin-reservations') {
-                adminResBtn.className = "px-4 py-2 rounded-lg font-semibold bg-primary text-white transition";
+                setActive(adminResBtn, true);
                 adminResSec.classList.remove("hidden");
                 renderAdminReservations();
             }
