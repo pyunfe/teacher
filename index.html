@@ -156,9 +156,9 @@
                 </div>
 
                 <div id="move-selection-bar" class="hidden flex flex-wrap items-center justify-between gap-3 bg-primary/5 border border-primary/30 rounded-xl px-4 py-2.5 mb-4">
-                    <span class="text-xs md:text-sm font-semibold text-primary">선택 모드: 이동할 학생을 클릭해서 선택하세요 (<span id="move-selection-count">0</span>명 선택됨)</span>
+                    <span class="text-xs md:text-sm font-semibold text-primary">선택 모드: 처리할 시간대 카드를 클릭해서 선택하세요 (<span id="move-selection-count">0</span>칸 선택됨)</span>
                     <div class="flex items-center gap-2">
-                        <button onclick="openMoveModalForSelection()" id="move-selection-open-btn" disabled class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-primary text-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-primary-hover transition">선택한 학생 시간표 이동</button>
+                        <button onclick="openBulkActionChooser()" id="move-selection-open-btn" disabled class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-primary text-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-primary-hover transition">선택한 항목 일괄 처리</button>
                         <button onclick="toggleMoveSelectionMode()" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-100 text-zinc-600 hover:bg-zinc-200 transition">선택 모드 종료</button>
                     </div>
                 </div>
@@ -169,7 +169,7 @@
                         <div class="flex justify-between items-center mb-4 pb-2 border-b border-zinc-100">
                             <h3 class="text-primary font-extrabold text-lg" id="label-friday">금요일</h3>
                             <div class="flex items-center gap-2">
-                                <button id="btn-move-friday" onclick="toggleMoveSelectionMode('friday')" class="text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-700 px-3 py-1.5 rounded-lg font-semibold transition">시간표 이동</button>
+                                <button id="btn-move-friday" onclick="toggleMoveSelectionMode('friday')" class="text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-700 px-3 py-1.5 rounded-lg font-semibold transition">일괄 처리</button>
                                 <button id="btn-add-friday" onclick="addSlotBox('friday')" class="text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-700 px-3 py-1.5 rounded-lg font-semibold transition">+ 시간대 박스 추가</button>
                             </div>
                         </div>
@@ -180,7 +180,7 @@
                         <div class="flex justify-between items-center mb-4 pb-2 border-b border-zinc-100">
                             <h3 class="text-primary font-extrabold text-lg" id="label-saturday">토요일</h3>
                             <div class="flex items-center gap-2">
-                                <button id="btn-move-saturday" onclick="toggleMoveSelectionMode('saturday')" class="text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-700 px-3 py-1.5 rounded-lg font-semibold transition">시간표 이동</button>
+                                <button id="btn-move-saturday" onclick="toggleMoveSelectionMode('saturday')" class="text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-700 px-3 py-1.5 rounded-lg font-semibold transition">일괄 처리</button>
                                 <button id="btn-add-saturday" onclick="addSlotBox('saturday')" class="text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-700 px-3 py-1.5 rounded-lg font-semibold transition">+ 시간대 박스 추가</button>
                             </div>
                         </div>
@@ -191,7 +191,7 @@
                         <div class="flex justify-between items-center mb-4 pb-2 border-b border-zinc-100">
                             <h3 class="text-primary font-extrabold text-lg" id="label-sunday">일요일</h3>
                             <div class="flex items-center gap-2">
-                                <button id="btn-move-sunday" onclick="toggleMoveSelectionMode('sunday')" class="text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-700 px-3 py-1.5 rounded-lg font-semibold transition">시간표 이동</button>
+                                <button id="btn-move-sunday" onclick="toggleMoveSelectionMode('sunday')" class="text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-700 px-3 py-1.5 rounded-lg font-semibold transition">일괄 처리</button>
                                 <button id="btn-add-sunday" onclick="addSlotBox('sunday')" class="text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-700 px-3 py-1.5 rounded-lg font-semibold transition">+ 시간대 박스 추가</button>
                             </div>
                         </div>
@@ -411,10 +411,23 @@
         </div>
     </div>
 
+    <div id="bulk-action-modal" class="hidden fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onclick="if(event.target===this) closeBulkActionChooser()">
+        <div class="bg-white rounded-2xl shadow-lg w-full max-w-xs flex flex-col">
+            <div class="flex justify-between items-center p-4 border-b border-zinc-100">
+                <h3 class="font-bold text-base text-zinc-800">일괄 처리 - <span id="bulk-action-count-label" class="text-primary">0</span>칸 선택됨</h3>
+                <button onclick="closeBulkActionChooser()" class="text-zinc-400 hover:text-zinc-700 text-xl leading-none">&times;</button>
+            </div>
+            <div class="p-4 space-y-2">
+                <button onclick="chooseBulkMove()" class="w-full px-4 py-2.5 rounded-lg text-sm font-semibold bg-zinc-50 hover:bg-primary/10 hover:text-primary text-zinc-700 border border-zinc-200 transition">📅 시간표 이동</button>
+                <button onclick="chooseBulkAbsence()" class="w-full px-4 py-2.5 rounded-lg text-sm font-semibold bg-zinc-50 hover:bg-rose-50 hover:text-rose-600 text-zinc-700 border border-zinc-200 transition">🚫 결석 처리</button>
+            </div>
+        </div>
+    </div>
+
     <div id="absence-reason-modal" class="hidden fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onclick="if(event.target===this) closeAbsenceReasonModal()">
         <div class="bg-white rounded-2xl shadow-lg w-full max-w-xs flex flex-col">
             <div class="flex justify-between items-center p-4 border-b border-zinc-100">
-                <h3 class="font-bold text-base text-zinc-800">결석 사유 선택</h3>
+                <h3 class="font-bold text-base text-zinc-800" id="absence-reason-modal-title">결석 사유 선택</h3>
                 <button onclick="closeAbsenceReasonModal()" class="text-zinc-400 hover:text-zinc-700 text-xl leading-none">&times;</button>
             </div>
             <div class="p-4 space-y-2">
@@ -482,7 +495,7 @@
         var moveModalTeacherName = null;
         var moveModalMultiNames = null; // 다중 선택 이동 모달일 때만 배열(학생 이름 목록), 단일 학생 이동일 땐 null
         var moveSelectionModeActive = false;
-        var moveSelectedStudents = []; // [{name, teacherName}, ...]
+        var moveSelectedStudents = []; // [{name, teacherName, slotId}, ...] - 시간대 카드(칸) 단위로 선택됨
 
         const teacherMap = {
             "9565": "황성웅", "9414": "정다운", "9062": "김신형", "2368": "문지현",
@@ -1498,7 +1511,7 @@
             ['friday', 'saturday', 'sunday'].forEach(day => {
                 const btn = document.getElementById(`btn-move-${day}`);
                 if (!btn) return;
-                btn.innerText = moveSelectionModeActive ? "선택 모드 종료" : "시간표 이동";
+                btn.innerText = moveSelectionModeActive ? "선택 모드 종료" : "일괄 처리";
                 btn.className = moveSelectionModeActive
                     ? "text-xs bg-primary text-white px-3 py-1.5 rounded-lg font-semibold transition"
                     : "text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-700 px-3 py-1.5 rounded-lg font-semibold transition";
@@ -1518,30 +1531,33 @@
             if (openBtn) openBtn.disabled = moveSelectedStudents.length === 0;
         }
 
-        // 선택 모드일 때 학생 카드를 클릭하면 출석/결석 버튼이나 비고 입력이 아닌 경우에만 선택을 토글
-        function handleStudentBlockClick(event, studentName, teacherName) {
+        // 선택 모드일 때 학생 카드를 클릭하면 출석/결석 버튼이나 비고 입력이 아닌 경우에만 선택을 토글.
+        // 한 학생이 같은 요일에 여러 시간대(예: 고3 토2, 토5)에 동시에 들어있을 수 있어서, 선택은
+        // 학생 단위가 아니라 "그 시간대 박스 카드" 단위(이름+강사+슬롯id)로 이루어진다. 그래야
+        // 일괄 결석 처리 시 선택하지 않은 시간대까지 같이 결석 처리되는 일이 없다.
+        function handleStudentBlockClick(event, studentName, teacherName, slotId) {
             if (!moveSelectionModeActive) return;
             if (event.target.closest('button, input')) return;
-            toggleMoveStudentSelection(studentName, teacherName);
+            toggleMoveStudentSelection(studentName, teacherName, slotId);
         }
 
-        function toggleMoveStudentSelection(studentName, teacherName) {
-            const idx = moveSelectedStudents.findIndex(x => x.name === studentName && x.teacherName === teacherName);
+        function toggleMoveStudentSelection(studentName, teacherName, slotId) {
+            const idx = moveSelectedStudents.findIndex(x => x.name === studentName && x.teacherName === teacherName && x.slotId === slotId);
             let nowSelected;
             if (idx !== -1) {
                 moveSelectedStudents.splice(idx, 1);
                 nowSelected = false;
             } else {
                 if (moveSelectedStudents.length > 0 && moveSelectedStudents[0].teacherName !== teacherName) {
-                    alert("같은 강사의 학생만 함께 선택해서 이동할 수 있습니다.");
+                    alert("같은 강사의 학생만 함께 선택해서 처리할 수 있습니다.");
                     return;
                 }
-                moveSelectedStudents.push({ name: studentName, teacherName });
+                moveSelectedStudents.push({ name: studentName, teacherName, slotId });
                 nowSelected = true;
             }
 
             document.querySelectorAll('.student-block').forEach(el => {
-                if (el.dataset.studentName === studentName && el.dataset.teacherName === teacherName) {
+                if (el.dataset.studentName === studentName && el.dataset.teacherName === teacherName && el.dataset.slotId === slotId) {
                     el.classList.toggle('move-selected', nowSelected);
                 }
             });
@@ -1552,8 +1568,53 @@
         function openMoveModalForSelection() {
             if (moveSelectedStudents.length === 0) return;
             const teacherName = moveSelectedStudents[0].teacherName;
-            const names = moveSelectedStudents.map(x => x.name);
+            // 시간표 이동은 특정 시간대 하나가 아니라 학생의 시간표 전체를 재설정하는 기능이라,
+            // 같은 학생이 여러 시간대 카드로 선택되어 있어도 학생 단위로 한 번씩만 모은다.
+            const names = [...new Set(moveSelectedStudents.map(x => x.name))];
             openMoveModalMulti(teacherName, names);
+        }
+
+        // ===== 일괄 처리(선택된 여러 학생) - 시간표 이동 / 결석 처리 중 선택 =====
+        function openBulkActionChooser() {
+            if (moveSelectedStudents.length === 0) return;
+            const countLabel = document.getElementById("bulk-action-count-label");
+            if (countLabel) countLabel.innerText = moveSelectedStudents.length;
+            document.getElementById("bulk-action-modal").classList.remove("hidden");
+        }
+
+        function closeBulkActionChooser() {
+            document.getElementById("bulk-action-modal").classList.add("hidden");
+        }
+
+        function chooseBulkMove() {
+            closeBulkActionChooser();
+            openMoveModalForSelection();
+        }
+
+        function chooseBulkAbsence() {
+            closeBulkActionChooser();
+            openAbsenceReasonModal(null, null, null, true);
+        }
+
+        // 선택된 시간대 카드들만 정확히 결석 처리한다. 학생 단위가 아니라 (이름+슬롯) 단위로 선택되므로,
+        // 같은 학생이 토2/토5에 모두 들어있어도 선택하지 않은 시간대는 영향받지 않는다.
+        function applyBulkAbsence(reason) {
+            if (moveSelectedStudents.length === 0) return;
+            const teacherName = moveSelectedStudents[0].teacherName;
+
+            moveSelectedStudents.forEach(({ name, slotId }) => {
+                const rec = getStudentRecord(name, slotId);
+                rec.status = '결석';
+                rec.memo = reason;
+                saveAttendanceRecord(currentSelectedWeek, getRecordKey(name, slotId), rec);
+            });
+
+            if (getCurrentActiveTeacher() === "통합출석부") {
+                renderIntegratedTimetable();
+            } else {
+                renderTimetableAndSlots(teacherName);
+            }
+            if (moveSelectionModeActive) toggleMoveSelectionMode();
         }
 
         function changeTeacher(targetValue) {
@@ -1814,7 +1875,7 @@
                             const newNameClass = isNewThisWeek ? "bg-red-100" : "";
 
                             studentsHtml += `
-                                <div class="student-block flex items-center p-2 rounded-lg border border-zinc-200 bg-white shadow-sm hover:border-primary" data-student-name="${s.name}" data-teacher-name="${tName}" onclick="handleStudentBlockClick(event, '${s.name}', '${tName}')" ondblclick="openMoveModal('${s.name}', '${tName}')" title="더블클릭하면 시간표 이동이 가능합니다">
+                                <div class="student-block flex items-center p-2 rounded-lg border border-zinc-200 bg-white shadow-sm hover:border-primary" data-student-name="${s.name}" data-teacher-name="${tName}" data-slot-id="${slot.id}" onclick="handleStudentBlockClick(event, '${s.name}', '${tName}', '${slot.id}')" ondblclick="openMoveModal('${s.name}', '${tName}')" title="더블클릭하면 시간표 이동이 가능합니다">
                                     <div class="w-24 shrink-0 truncate mr-1.5">
                                         <span class="font-bold text-xs text-zinc-900 ${newNameClass}">${s.name}</span>
                                         <span class="text-[10px] text-zinc-500">(${s.school})</span>
@@ -1907,7 +1968,7 @@
                         const newNameClass = isNewThisWeek ? "bg-red-100" : "";
 
                         studentsHtml += `
-                            <div class="student-block flex items-center p-2 rounded-lg border border-zinc-200 bg-white shadow-sm hover:border-primary" data-student-name="${s.name}" data-teacher-name="${teacherName}" onclick="handleStudentBlockClick(event, '${s.name}', '${teacherName}')" ondblclick="openMoveModal('${s.name}', '${teacherName}')" title="더블클릭하면 시간표 이동이 가능합니다">
+                            <div class="student-block flex items-center p-2 rounded-lg border border-zinc-200 bg-white shadow-sm hover:border-primary" data-student-name="${s.name}" data-teacher-name="${teacherName}" data-slot-id="${slot.id}" onclick="handleStudentBlockClick(event, '${s.name}', '${teacherName}', '${slot.id}')" ondblclick="openMoveModal('${s.name}', '${teacherName}')" title="더블클릭하면 시간표 이동이 가능합니다">
                                 <div class="w-24 shrink-0 truncate mr-1.5">
                                     <span class="font-bold text-xs text-zinc-900 ${newNameClass}">${s.name}</span>
                                     <span class="text-[10px] text-zinc-500">(${s.school})</span>
@@ -1966,14 +2027,23 @@
         }
 
         // ===== 결석 버튼 -> 사유 선택 모달 =====
+        // isBulk가 true면 특정 학생 1명이 아니라 선택 모드로 고른 여러 학생 전체에 사유를 적용한다.
         var absenceModalStudentName = null;
         var absenceModalSlotId = null;
         var absenceModalBtnElement = null;
+        var absenceModalIsBulk = false;
 
-        function openAbsenceReasonModal(studentName, slotId, btnElement) {
+        function openAbsenceReasonModal(studentName, slotId, btnElement, isBulk) {
             absenceModalStudentName = studentName;
             absenceModalSlotId = slotId;
             absenceModalBtnElement = btnElement;
+            absenceModalIsBulk = !!isBulk;
+            const titleEl = document.getElementById("absence-reason-modal-title");
+            if (titleEl) {
+                titleEl.innerText = absenceModalIsBulk
+                    ? `결석 사유 선택 (${moveSelectedStudents.length}칸 일괄 처리)`
+                    : "결석 사유 선택";
+            }
             document.getElementById("absence-reason-modal").classList.remove("hidden");
         }
 
@@ -1984,6 +2054,7 @@
             absenceModalStudentName = null;
             absenceModalSlotId = null;
             absenceModalBtnElement = null;
+            absenceModalIsBulk = false;
         }
 
         function toggleAbsenceCustomInput() {
@@ -2008,6 +2079,12 @@
         }
 
         function selectAbsenceReason(reason) {
+            if (absenceModalIsBulk) {
+                applyBulkAbsence(reason);
+                closeAbsenceReasonModal();
+                return;
+            }
+
             if (!absenceModalStudentName || !absenceModalSlotId || !absenceModalBtnElement) {
                 closeAbsenceReasonModal();
                 return;
