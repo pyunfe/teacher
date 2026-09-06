@@ -34,14 +34,40 @@
         .horizontal-scroll-container::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
         .horizontal-scroll-container::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         .horizontal-scroll-container::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        .horizontal-scroll-container { -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain; }
+
+        /* ===== 모바일(폰/태블릿) 터치 최적화 =====
+           - 손가락 터치 기기(coarse pointer)에서만 적용, 마우스로 쓰는 PC/랩탑은 기존 그대로 둔다.
+           - 입력창 글자 크기를 16px 미만으로 두면 iOS Safari가 포커스 시 자동으로 화면을 확대해버려서
+             입력할 때마다 화면이 튀는 것처럼 느껴짐 -> 16px로 고정해서 방지.
+           - 버튼/탭 등 터치 영역이 너무 작으면 오탭이 잦아서 최소 크기를 넉넉히 키움. */
+        @media (pointer: coarse) {
+            button, a, select, summary { touch-action: manipulation; }
+
+            input, select, textarea { font-size: 16px !important; }
+
+            .status-btn { padding: 7px 12px !important; font-size: 12px !important; min-height: 32px; }
+
+            #timetable-container .student-block { padding: 10px !important; }
+            #timetable-container .student-block input[type="text"] { padding-top: 8px !important; padding-bottom: 8px !important; }
+
+            header nav button, header button[onclick="handleLogout()"] { min-height: 40px; }
+            #week-select, #teacher-select, #management-teacher-filter, #management-school-filter { min-height: 40px; }
+
+            #classroom-day-tabs button,
+            #management-student-list button,
+            .flex.items-center.space-x-1\.5 > button { min-height: 34px; }
+
+            .fixed.inset-0 button { min-height: 40px; }
+        }
     </style>
 </head>
 <body class="bg-[#F7F7F5] text-[#1c1b1b]">
 
     <div id="sms-toast-container" class="fixed top-4 right-4 z-[100] space-y-2 w-80"></div>
 
-    <div id="login-screen" class="flex items-center justify-center min-h-screen bg-[#F7F7F5]">
-        <div class="bg-white p-8 rounded-2xl shadow-sm border border-zinc-200 w-96 text-center">
+    <div id="login-screen" class="flex items-center justify-center min-h-screen bg-[#F7F7F5] px-4">
+        <div class="bg-white p-8 rounded-2xl shadow-sm border border-zinc-200 w-full max-w-96 text-center">
             <h1 class="text-2xl font-bold text-primary mb-2 tracking-tight">국성티처</h1>
             <p class="text-zinc-500 mb-6 text-sm">중·고등부 학생 관리 시스템 로그인</p>
             <div class="space-y-4">
@@ -58,7 +84,7 @@
     <div id="app-screen" class="hidden min-h-screen flex flex-col">
         <header class="bg-white border-b border-zinc-200 px-4 md:px-6 py-3 md:py-4 flex flex-wrap gap-3 justify-between items-center sticky top-0 z-40">
             <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
-                <h1 class="text-xl font-bold text-primary tracking-tighter">국성티처</h1>
+                <h1 onclick="location.reload()" class="text-xl font-bold text-primary tracking-tighter cursor-pointer select-none" title="새로고침">국성티처</h1>
                 <span id="user-badge" class="px-3 py-1 bg-[#802020]/10 text-primary rounded-full text-sm font-medium">강사 모드</span>
                 <span id="save-status-badge" class="hidden px-3 py-1 rounded-full text-sm font-medium"></span>
 
@@ -256,7 +282,7 @@
                             <h3 class="font-bold text-sm text-zinc-800">미배정 대반 목록</h3>
                             <span class="text-xs text-zinc-400" id="classroom-pool-count"></span>
                         </div>
-                        <div id="classroom-pool-list" class="space-y-2 max-h-[720px] overflow-y-auto pr-1" ondragover="handleClassroomPoolDragOver(event)" ondrop="handleClassroomPoolDrop(event)"></div>
+                        <div id="classroom-pool-list" class="space-y-2 max-h-[720px] overflow-y-auto pr-1" ondragover="handleClassroomPoolDragOver(event)" ondrop="handleClassroomPoolDrop(event)" onclick="handleClassroomPoolTap(event)"></div>
                     </div>
                 </div>
             </section>
@@ -311,7 +337,7 @@
                 <button onclick="closeStudentModal()" class="text-zinc-400 hover:text-zinc-700 text-xl leading-none">&times;</button>
             </div>
             <div class="p-5 space-y-4 overflow-y-auto">
-                <div class="grid grid-cols-2 gap-4">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div class="space-y-1">
                         <label class="text-xs font-semibold text-zinc-600">이름 *</label>
                         <input type="text" id="student-modal-name" placeholder="예: 홍길동" class="w-full border border-zinc-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
@@ -517,6 +543,9 @@
         // 구조: { friday: { "강사명::슬롯id": "강의실id" }, saturday: {...}, sunday: {...} }
         var classroomAssignments = { friday: {}, saturday: {}, sunday: {} };
         var currentClassroomDay = "friday";
+        // HTML5 드래그앤드롭(draggable/dragstart/drop)은 터치 기기에서 전혀 동작하지 않기 때문에,
+        // 모바일/태블릿에서도 배정할 수 있도록 "탭해서 선택 -> 넣을 칸/미배정 목록을 탭" 방식을 함께 제공한다.
+        var classroomTapSelectedKey = null;
 
         async function loadDataFromSupabase() {
             if (!supabaseClient) return;
@@ -849,6 +878,7 @@
             initWeeks();
             await loadDataFromSupabase();
             setupRealtimeSync();
+            await tryRestoreSession();
         });
 
         // ===== 실시간 동기화 (다른 브라우저의 저장 내용을 새로고침 없이 반영) =====
@@ -918,11 +948,18 @@
         // 그 사이에 브라우저(특히 태블릿에서 가상 키보드가 접히는 시점과 겹치면)가 스크롤 위치를
         // 기준으로 삼을 DOM을 잃어버려서 화면이 맨 위로 튀는 문제가 있었음. 렌더링 전후로 스크롤
         // 위치를 직접 기억했다가 복원해서 사용자가 보고 있던/입력하던 위치에 그대로 머물게 한다.
-        function renderCurrentActiveView() {
-            if (document.getElementById("app-screen").classList.contains('hidden')) return;
-
+        // 사용자 액션(체크박스 클릭, 모달 저장 등)으로 인한 재렌더링도 실시간 동기화와 동일하게
+        // 화면 전체를 다시 그리기 때문에, 기기/브라우저에 따라 스크롤 앵커링이 없으면 맨 위로 튈 수 있다.
+        // 그래서 각 탭의 렌더 함수 자체에 스크롤 위치 저장/복원을 공통으로 적용한다.
+        function withScrollPreserved(renderFn) {
             const scrollX = window.scrollX;
             const scrollY = window.scrollY;
+            renderFn();
+            requestAnimationFrame(() => window.scrollTo(scrollX, scrollY));
+        }
+
+        function renderCurrentActiveView() {
+            if (document.getElementById("app-screen").classList.contains('hidden')) return;
 
             const attSec = document.getElementById("tab-attendance");
             const mngSec = document.getElementById("tab-management");
@@ -940,25 +977,37 @@
             } else if (adminResSec && !adminResSec.classList.contains('hidden')) {
                 renderAdminReservations();
             }
-
-            requestAnimationFrame(() => window.scrollTo(scrollX, scrollY));
         }
 
-        async function handleLogin() {
-            const inputVal = document.getElementById("login-input").value.trim();
-            if (!inputVal) {
-                alert("비밀번호를 입력해주세요.");
-                return;
+        // 로그아웃하기 전까지는 앱을 껐다 켜거나 새로고침해도 로그인 상태가 유지되도록
+        // 로그인 신원만 localStorage에 저장해둔다(비밀번호 자체는 저장하지 않음).
+        const SESSION_STORAGE_KEY = "guksungTeacherSession";
+
+        function persistSession() {
+            try {
+                localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify({ isAdmin: isAdminLoggedIn, identity: currentLoginIdentity }));
+            } catch (err) {}
+        }
+
+        function clearSession() {
+            try { localStorage.removeItem(SESSION_STORAGE_KEY); } catch (err) {}
+        }
+
+        function loadSession() {
+            try {
+                const raw = localStorage.getItem(SESSION_STORAGE_KEY);
+                return raw ? JSON.parse(raw) : null;
+            } catch (err) {
+                return null;
             }
+        }
 
-            await loadDataFromSupabase();
-
+        function applyLoggedInUI(isAdmin, identity) {
+            isAdminLoggedIn = isAdmin;
+            currentLoginIdentity = identity;
             const adminResBtn = document.getElementById("tab-admin-reservations-btn");
-            initWeeks();
 
-            if (inputVal === "admin8566") {
-                isAdminLoggedIn = true;
-                currentLoginIdentity = "관리자";
+            if (isAdmin) {
                 document.getElementById("user-badge").innerText = "관리자 모드 (전체 권한)";
                 document.getElementById("admin-selector-wrapper").classList.remove("hidden");
                 adminResBtn.classList.remove("hidden");
@@ -969,11 +1018,8 @@
                     if (btn) btn.classList.remove("hidden");
                 });
                 changeTeacher("통합출석부");
-            } else if (teacherMap[inputVal]) {
-                isAdminLoggedIn = false;
-                const tName = teacherMap[inputVal];
-                currentLoginIdentity = tName;
-                document.getElementById("user-badge").innerText = `강사 모드 (${tName}T)`;
+            } else {
+                document.getElementById("user-badge").innerText = `강사 모드 (${identity}T)`;
                 document.getElementById("admin-selector-wrapper").classList.add("hidden");
                 adminResBtn.classList.remove("hidden");
                 document.getElementById("admin-res-page-title").innerText = "문자 발송 예약 내역";
@@ -982,10 +1028,7 @@
                     const btn = document.getElementById(`btn-add-${d}`);
                     if (btn) btn.classList.add("hidden");
                 });
-                changeTeacher(tName);
-            } else {
-                alert("등록되지 않은 비밀번호입니다.");
-                return;
+                changeTeacher(identity);
             }
 
             document.getElementById("login-screen").classList.add("hidden");
@@ -994,9 +1037,40 @@
             startReservationScheduler();
         }
 
+        async function handleLogin() {
+            const inputVal = document.getElementById("login-input").value.trim();
+            if (!inputVal) {
+                alert("비밀번호를 입력해주세요.");
+                return;
+            }
+
+            await loadDataFromSupabase();
+            initWeeks();
+
+            if (inputVal === "admin8566") {
+                applyLoggedInUI(true, "관리자");
+            } else if (teacherMap[inputVal]) {
+                applyLoggedInUI(false, teacherMap[inputVal]);
+            } else {
+                alert("등록되지 않은 비밀번호입니다.");
+                return;
+            }
+
+            persistSession();
+        }
+
+        // 저장된 세션이 있으면 비밀번호 입력 없이 바로 이전 로그인 상태로 복원한다.
+        async function tryRestoreSession() {
+            const session = loadSession();
+            if (!session || !session.identity) return;
+            applyLoggedInUI(!!session.isAdmin, session.identity);
+        }
+
         function handleLogout() {
             document.getElementById("login-input").value = "";
             isAdminLoggedIn = false;
+            currentLoginIdentity = null;
+            clearSession();
             stopReservationScheduler();
             document.getElementById("app-screen").classList.add("hidden");
             document.getElementById("login-screen").classList.remove("hidden");
@@ -1675,6 +1749,10 @@
         }
 
         function renderIntegratedTimetable() {
+            withScrollPreserved(renderIntegratedTimetableImpl);
+        }
+
+        function renderIntegratedTimetableImpl() {
             updateSectionDateLabels();
 
             const filterWrapper = document.getElementById("integrated-teacher-filter");
@@ -1790,6 +1868,10 @@
         }
 
         function renderTimetableAndSlots(teacherName) {
+            withScrollPreserved(() => renderTimetableAndSlotsImpl(teacherName));
+        }
+
+        function renderTimetableAndSlotsImpl(teacherName) {
             updateSectionDateLabels();
             const data = teacherDataStore[teacherName];
             if (!data) return;
@@ -1940,6 +2022,10 @@
         }
 
         function renderManagementStudents(teacherName) {
+            withScrollPreserved(() => renderManagementStudentsImpl(teacherName));
+        }
+
+        function renderManagementStudentsImpl(teacherName) {
             // 관리자가 통합출석부(전체 강사) 모드일 때는 전체 강사의 학생을 한번에 보여준다.
             if (isAdminLoggedIn && getCurrentActiveTeacher() === "통합출석부") {
                 renderManagementStudentsAll();
@@ -2729,6 +2815,10 @@
         }
 
         function renderAdminReservations() {
+            withScrollPreserved(renderAdminReservationsImpl);
+        }
+
+        function renderAdminReservationsImpl() {
             const container = document.getElementById("admin-reservation-list");
             container.innerHTML = "";
 
@@ -2851,6 +2941,7 @@
 
         function switchClassroomDay(day) {
             currentClassroomDay = day;
+            classroomTapSelectedKey = null;
             ['friday', 'saturday', 'sunday'].forEach(d => {
                 const btn = document.getElementById(`classroom-day-${d}-btn`);
                 if (!btn) return;
@@ -2862,10 +2953,14 @@
         }
 
         function renderClassroomTab() {
+            withScrollPreserved(renderClassroomTabImpl);
+        }
+
+        function renderClassroomTabImpl() {
             const descEl = document.getElementById("classroom-mode-desc");
             if (descEl) {
                 descEl.innerText = isAdminLoggedIn
-                    ? "오른쪽 미배정 목록의 반을 드래그해서 강의실 칸에 넣거나, 배정된 반을 다시 꺼낼 수 있습니다."
+                    ? "오른쪽 미배정 목록의 반을 드래그하거나, 탭해서 선택한 뒤 넣을 칸을 탭해서 강의실에 배정할 수 있습니다."
                     : "현재 배정된 강의실 현황을 확인할 수 있습니다. (배정 작업은 관리자 모드에서만 가능합니다)";
             }
 
@@ -2960,14 +3055,15 @@
                         const color = TEACHER_COLORS[occ.item.teacherName] || '#d4d4d8';
                         const dark = isDarkColor(color);
                         const overCap = occ.item.count > r.capacity;
-                        const dragAttr = isAdminLoggedIn ? `draggable="true" ondragstart="handleClassroomBlockDragStart(event,'${occ.item.key}')"` : '';
+                        const isTapSelected = classroomTapSelectedKey === occ.item.key;
+                        const dragAttr = isAdminLoggedIn ? `draggable="true" ondragstart="handleClassroomBlockDragStart(event,'${occ.item.key}')" onclick="handleClassroomBlockTap(event,'${occ.item.key}')"` : '';
                         const removeBtn = isAdminLoggedIn ? `<button onclick="unassignClassroomSlot('${day}','${occ.item.key}')" class="text-[10px] ${dark ? 'text-rose-200' : 'text-rose-500'} hover:underline font-semibold mt-1">빼기</button>` : '';
                         // "반이름 (시간대)" 형태의 제목에서 반이름만 표시용으로 분리 (시간 데이터 자체는 range에 그대로 유지되어 박스 길이 계산에 계속 사용됨)
                         const titleMatch = occ.item.slot.title.match(/^(.*?)\s*\(([^)]*)\)\s*$/);
                         const namePart = titleMatch ? titleMatch[1].trim() : occ.item.slot.title;
                         rowHtml += `
                             <td rowspan="${duration}" class="align-top p-0" style="height:${blockHeight}px;">
-                                <div ${dragAttr} class="w-full p-2 text-[11px] leading-tight box-border overflow-hidden ${isAdminLoggedIn ? 'cursor-grab active:cursor-grabbing' : ''}" style="background:${color}; height:${blockHeight}px; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.18); text-align:center; display:flex; flex-direction:column; align-items:center; justify-content:center;">
+                                <div ${dragAttr} class="w-full p-2 text-[11px] leading-tight box-border overflow-hidden ${isAdminLoggedIn ? 'cursor-grab active:cursor-grabbing' : ''}" style="background:${color}; height:${blockHeight}px; box-shadow: ${isTapSelected ? 'inset 0 0 0 3px #802020' : 'inset 0 0 0 1px rgba(0,0,0,0.18)'}; text-align:center; display:flex; flex-direction:column; align-items:center; justify-content:center;">
                                     <div class="font-bold ${dark ? 'text-white' : 'text-zinc-800'} truncate" style="width:100%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${namePart}</div>
                                     <div class="${dark ? 'text-white' : 'text-primary'} font-semibold">${occ.item.teacherName}T</div>
                                     <div class="${overCap ? (dark ? 'text-rose-200 font-extrabold' : 'text-rose-600 font-extrabold') : (dark ? 'text-zinc-200 font-semibold' : 'text-zinc-500 font-semibold')}">(${occ.item.count}/${r.capacity})</div>
@@ -2975,8 +3071,9 @@
                                 </div>
                             </td>`;
                     } else {
-                        const dropAttr = isAdminLoggedIn ? `ondragover="handleClassroomCellDragOver(event)" ondrop="handleClassroomCellDrop(event,'${day}','${r.id}')"` : '';
-                        rowHtml += `<td style="height:${ROW_HEIGHT}px; ${CELL_BORDER}" ${dropAttr}></td>`;
+                        const dropAttr = isAdminLoggedIn ? `ondragover="handleClassroomCellDragOver(event)" ondrop="handleClassroomCellDrop(event,'${day}','${r.id}')" onclick="handleClassroomCellTap('${day}','${r.id}')"` : '';
+                        const tapTargetCls = (isAdminLoggedIn && classroomTapSelectedKey) ? 'cursor-pointer' : '';
+                        rowHtml += `<td class="${tapTargetCls}" style="height:${ROW_HEIGHT}px; ${CELL_BORDER}" ${dropAttr}></td>`;
                     }
                 });
                 rowHtml += `</tr>`;
@@ -3010,10 +3107,11 @@
                     poolContainer.innerHTML = unassigned.map(s => {
                         const color = TEACHER_COLORS[s.teacherName] || '#d4d4d8';
                         const dark = isDarkColor(color);
-                        const dragAttr = isAdminLoggedIn ? `draggable="true" ondragstart="handleClassroomBlockDragStart(event,'${s.key}')"` : '';
+                        const isTapSelected = classroomTapSelectedKey === s.key;
+                        const dragAttr = isAdminLoggedIn ? `draggable="true" ondragstart="handleClassroomBlockDragStart(event,'${s.key}')" onclick="handleClassroomBlockTap(event,'${s.key}')"` : '';
                         const timeLabel = s.range ? `${s.range.start}:00 - ${s.range.end}:00 (${s.range.end - s.range.start}시간)` : '시간 인식 불가';
                         return `
-                            <div ${dragAttr} class="p-2.5 rounded-xl text-xs ${isAdminLoggedIn ? 'cursor-grab active:cursor-grabbing' : ''}" style="background:${dark ? color : color + '33'}; border:1px solid ${color};">
+                            <div ${dragAttr} class="p-2.5 rounded-xl text-xs ${isAdminLoggedIn ? 'cursor-grab active:cursor-grabbing' : ''}" style="background:${dark ? color : color + '33'}; border:${isTapSelected ? '2px solid #802020' : `1px solid ${color}`};">
                                 <div class="font-bold ${dark ? 'text-white' : 'text-zinc-800'}">${s.slot.title}</div>
                                 <div class="${dark ? 'text-white' : 'text-primary'} font-semibold text-[11px]">${s.teacherName}T</div>
                                 <div class="${dark ? 'text-zinc-200' : 'text-zinc-500'} text-[11px]">${timeLabel} · ${s.count}명</div>
@@ -3056,6 +3154,31 @@
             if (!isAdminLoggedIn) return;
             const key = event.dataTransfer.getData('text/plain');
             if (!key) return;
+            unassignClassroomSlot(currentClassroomDay, key);
+        }
+
+        // ===== 터치 기기용 탭 배정(드래그앤드롭 대체) =====
+        // 반 블록을 탭하면 선택되고(다시 탭하면 선택 해제), 선택된 상태에서 빈 칸을 탭하면 그 칸에 배정,
+        // 미배정 목록의 빈 영역을 탭하면 배정 해제된다.
+        function handleClassroomBlockTap(event, key) {
+            if (!isAdminLoggedIn) return;
+            event.stopPropagation();
+            classroomTapSelectedKey = (classroomTapSelectedKey === key) ? null : key;
+            renderClassroomGrid(currentClassroomDay);
+        }
+
+        function handleClassroomCellTap(day, roomId) {
+            if (!isAdminLoggedIn || !classroomTapSelectedKey) return;
+            const key = classroomTapSelectedKey;
+            classroomTapSelectedKey = null;
+            assignClassroomSlot(day, key, roomId);
+        }
+
+        function handleClassroomPoolTap(event) {
+            if (!isAdminLoggedIn || !classroomTapSelectedKey) return;
+            if (event.target.closest('[draggable="true"]')) return;
+            const key = classroomTapSelectedKey;
+            classroomTapSelectedKey = null;
             unassignClassroomSlot(currentClassroomDay, key);
         }
 
