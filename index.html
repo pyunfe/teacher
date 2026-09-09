@@ -344,6 +344,25 @@
         </div>
     </div>
 
+    <div id="student-add-type-modal" class="hidden fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onclick="if(event.target===this) closeStudentAddTypeModal()">
+        <div class="bg-white rounded-2xl shadow-lg w-full max-w-sm flex flex-col">
+            <div class="flex justify-between items-center p-4 border-b border-zinc-100">
+                <h3 class="font-bold text-base text-zinc-800">원생 등록</h3>
+                <button onclick="closeStudentAddTypeModal()" class="text-zinc-400 hover:text-zinc-700 text-xl leading-none">&times;</button>
+            </div>
+            <div class="p-5 space-y-3">
+                <button type="button" onclick="chooseStudentAddType('existing')" class="w-full text-left px-4 py-3 rounded-xl border border-zinc-200 hover:border-primary transition">
+                    <div class="text-sm font-bold text-zinc-800">재원</div>
+                    <div class="text-xs text-zinc-500 mt-0.5">이미 다니고 있던 학생 (등록일 설정 없이 모든 주차에 항상 표시)</div>
+                </button>
+                <button type="button" onclick="chooseStudentAddType('new')" class="w-full text-left px-4 py-3 rounded-xl border border-zinc-200 hover:border-primary transition">
+                    <div class="text-sm font-bold text-zinc-800">신규</div>
+                    <div class="text-xs text-zinc-500 mt-0.5">이번에 새로 등록하는 학생 (등록일 지정 가능)</div>
+                </button>
+            </div>
+        </div>
+    </div>
+
     <div id="student-modal" class="hidden fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onclick="if(event.target===this) closeStudentModal()">
         <div class="bg-white rounded-2xl shadow-lg w-full max-w-lg max-h-[85vh] flex flex-col">
             <div class="flex justify-between items-center p-4 border-b border-zinc-100">
@@ -368,7 +387,7 @@
                         <label class="text-xs font-semibold text-zinc-600">학부모 전화번호</label>
                         <input type="text" id="student-modal-parent-phone" placeholder="010-1234-5678" class="w-full border border-zinc-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
                     </div>
-                    <div class="space-y-1">
+                    <div class="space-y-1" id="student-modal-registered-at-wrapper">
                         <label class="text-xs font-semibold text-zinc-600">등록일</label>
                         <input type="date" id="student-modal-registered-at" class="w-full border border-zinc-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
                     </div>
@@ -2348,9 +2367,11 @@
 
         // ===== 원생 신규 등록 / 수정 모달 =====
         var studentModalMode = null; // 'add' | 'edit'
+        var studentModalAddType = null; // 'existing'(재원) | 'new'(신규), mode==='add'일 때만 사용
         var studentModalTeacherName = null;
         var studentModalEditIndex = null;
         var studentModalOriginalName = null; // 수정 모드 진입 시점의 원래 이름(저장 시 최신본에서 이 이름으로 다시 찾기 위함)
+        var studentAddTypePendingTeacher = null;
 
         function openAddStudentModal() {
             if (!isAdminLoggedIn) return;
@@ -2365,7 +2386,20 @@
                 alert("먼저 출석부 탭에서 시간대 박스를 하나 이상 생성해주세요!");
                 return;
             }
-            openStudentModal('add', currentTeacher, null);
+            studentAddTypePendingTeacher = currentTeacher;
+            document.getElementById("student-add-type-modal").classList.remove("hidden");
+        }
+
+        function closeStudentAddTypeModal() {
+            document.getElementById("student-add-type-modal").classList.add("hidden");
+            studentAddTypePendingTeacher = null;
+        }
+
+        function chooseStudentAddType(addType) {
+            const teacherName = studentAddTypePendingTeacher;
+            closeStudentAddTypeModal();
+            if (!teacherName) return;
+            openStudentModal('add', teacherName, null, addType);
         }
 
         function openEditStudentModal(teacherName, index) {
@@ -2373,11 +2407,12 @@
             openStudentModal('edit', teacherName, index);
         }
 
-        function openStudentModal(mode, teacherName, index) {
+        function openStudentModal(mode, teacherName, index, addType) {
             const data = teacherDataStore[teacherName];
             if (!data) return;
 
             studentModalMode = mode;
+            studentModalAddType = (mode === 'add') ? (addType || 'new') : null;
             studentModalTeacherName = teacherName;
             studentModalEditIndex = (mode === 'edit') ? index : null;
 
@@ -2452,6 +2487,10 @@
                 withdrawSection.classList.add("hidden");
             }
 
+            // 등록일 입력: '재원'으로 신규 등록하는 경우엔 등록일 개념이 없으므로 숨김 (firstWeekKey 없이 항상 표시되는 학생이 됨)
+            const registeredAtWrapper = document.getElementById("student-modal-registered-at-wrapper");
+            registeredAtWrapper.classList.toggle("hidden", mode === 'add' && studentModalAddType === 'existing');
+
             document.getElementById("student-modal").classList.remove("hidden");
             document.getElementById("student-modal-name").focus();
         }
@@ -2459,6 +2498,7 @@
         function closeStudentModal() {
             document.getElementById("student-modal").classList.add("hidden");
             studentModalMode = null;
+            studentModalAddType = null;
             studentModalTeacherName = null;
             studentModalEditIndex = null;
             studentModalOriginalName = null;
@@ -2514,8 +2554,15 @@
                     target.firstWeekKey = firstWeekKey;
                     delete target.slotId;
                 };
+            } else if (studentModalAddType === 'existing') {
+                // 재원: 등록일 개념이 없는 기존 학생과 동일하게 firstWeekKey/registeredAt을 넣지 않음 -> 모든 주차에 항상 표시
+                data.students.push({ name, school, phone, parentPhone, slotIds: chosenIds });
+
+                applyPatch = (freshData) => {
+                    freshData.students.push({ name, school, phone, parentPhone, slotIds: chosenIds });
+                };
             } else {
-                // 등록일 입력값(없으면 오늘) 기준으로 firstWeekKey/registeredAt 저장 -> 그 날짜가 속한 주차부터 출석부에 표시
+                // 신규: 등록일 입력값(없으면 오늘) 기준으로 firstWeekKey/registeredAt 저장 -> 그 날짜가 속한 주차부터 출석부에 표시
                 data.students.push({ name, school, phone, parentPhone, slotIds: chosenIds, firstWeekKey: firstWeekKey, registeredAt: registeredAt });
 
                 applyPatch = (freshData) => {
