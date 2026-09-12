@@ -1454,25 +1454,11 @@
         }
 
         // 단일/다중 모드에 맞춰 체크 상태를 계산해서 다시 그림. 다중 모드에서는 이동 범위(라디오)를 바꿀 때마다 호출됨.
-        // 다중 + 이번 주차만 임시 이동: 학생마다 현재 시간대가 달라 혼동을 피하려고 빈 상태로 시작.
-        // 다중 + 기본 시간표 변경: 선택된 학생들이 현재 기본 시간표로 갖고 있는 시간대들을 합쳐서 미리 체크해줌.
+        // 임시 이동/기본 시간표 변경 모두 학생마다(또는 이미 걸려있던 설정과) 헷갈리지 않도록 항상 빈 상태로 시작.
         function renderMoveModalSlotList() {
             if (!moveModalTeacherName) return;
 
-            const names = moveModalMultiNames ? moveModalMultiNames : (moveModalStudentName ? [moveModalStudentName] : []);
-            const scope = document.querySelector('input[name="move-scope"]:checked').value;
-            const data = teacherDataStore[moveModalTeacherName];
-
-            // 이번 주차만 임시 이동(week)인 경우: 학생마다(또는 이미 걸려있던 임시 설정과) 헷갈리지 않도록 항상 빈 상태로 시작.
-            // 기본 시간표 변경(default)인 경우: 현재 기본 시간표(임시 이동 제외)에 들어있는 시간대를 미리 체크.
-            let checkedIdSet = new Set();
-            if (scope === 'default' && data) {
-                names.forEach(name => {
-                    const student = data.students.find(s => s.name === name);
-                    if (student) getStudentSlotIds(student).forEach(id => checkedIdSet.add(id));
-                });
-            }
-            buildMoveModalSlotListDom(moveModalTeacherName, id => checkedIdSet.has(id));
+            buildMoveModalSlotListDom(moveModalTeacherName, () => false);
         }
 
         function closeMoveModal() {
