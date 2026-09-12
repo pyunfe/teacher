@@ -1214,34 +1214,51 @@
         }
 
         // ===== 강사별 기본 시간표 vs 주차별 임시 이동 =====
-        function getWeeklyOverride(teacherName, studentName, weekKey) {
+        // 동명이인 학생을 구분하기 위해 이름+학교로 키를 만든다. 예전엔 이름만으로 저장했으므로
+        // 조회 시엔 예전 방식(이름 전용 키)도 함께 찾아준다(하위 호환).
+        function overrideKey(student) {
+            if (!student) return '';
+            return student.school ? `${student.name}::${student.school}` : student.name;
+        }
+
+        function getWeeklyOverride(teacherName, student, weekKey) {
             const wk = weeklyOverrides[weekKey];
             if (!wk || !wk[teacherName]) return null;
-            return wk[teacherName][studentName] || null;
+            const teacherWeek = wk[teacherName];
+            const key = overrideKey(student);
+            if (teacherWeek[key]) return teacherWeek[key];
+            if (student && teacherWeek[student.name]) return teacherWeek[student.name];
+            return null;
         }
 
-        function hasWeeklyOverride(teacherName, studentName, weekKey) {
-            return !!getWeeklyOverride(teacherName, studentName, weekKey);
+        function hasWeeklyOverride(teacherName, student, weekKey) {
+            return !!getWeeklyOverride(teacherName, student, weekKey);
         }
 
-        function setWeeklyOverride(teacherName, studentName, weekKey, slotIds) {
+        function setWeeklyOverride(teacherName, student, weekKey, slotIds) {
             if (!weeklyOverrides[weekKey]) weeklyOverrides[weekKey] = {};
             if (!weeklyOverrides[weekKey][teacherName]) weeklyOverrides[weekKey][teacherName] = {};
-            weeklyOverrides[weekKey][teacherName][studentName] = { slotIds: slotIds.slice() };
+            const teacherWeek = weeklyOverrides[weekKey][teacherName];
+            const key = overrideKey(student);
+            teacherWeek[key] = { slotIds: slotIds.slice() };
+            if (student && key !== student.name) delete teacherWeek[student.name];
             saveWeeklyOverridesForTeacher(weekKey, teacherName);
         }
 
-        function clearWeeklyOverride(teacherName, studentName, weekKey) {
+        function clearWeeklyOverride(teacherName, student, weekKey) {
             const wk = weeklyOverrides[weekKey];
-            if (wk && wk[teacherName] && wk[teacherName][studentName]) {
-                delete wk[teacherName][studentName];
-                saveWeeklyOverridesForTeacher(weekKey, teacherName);
-            }
+            if (!wk || !wk[teacherName]) return;
+            const teacherWeek = wk[teacherName];
+            const key = overrideKey(student);
+            let changed = false;
+            if (teacherWeek[key]) { delete teacherWeek[key]; changed = true; }
+            if (student && teacherWeek[student.name]) { delete teacherWeek[student.name]; changed = true; }
+            if (changed) saveWeeklyOverridesForTeacher(weekKey, teacherName);
         }
 
         // 해당 주차에 실제로 표시될 시간대 ID 목록 (임시 이동이 있으면 그것을, 없으면 강사별 기본 시간표를 반환)
         function getEffectiveSlotIds(teacherName, student, weekKey) {
-            const override = getWeeklyOverride(teacherName, student.name, weekKey);
+            const override = getWeeklyOverride(teacherName, student, weekKey);
             if (override) return override.slotIds.slice();
             return getStudentSlotIds(student);
         }
@@ -1367,7 +1384,8 @@
             document.getElementById("move-modal-student-name").innerText = `${studentName} (${teacherName}T)`;
             document.getElementById("move-modal-week-label").innerText = currentSelectedWeek;
 
-            const isTemp = hasWeeklyOverride(teacherName, studentName, currentSelectedWeek);
+            const resolvedStudent = resolveMoveModalStudent(data.students, studentName);
+            const isTemp = hasWeeklyOverride(teacherName, resolvedStudent, currentSelectedWeek);
 
             document.getElementById("move-scope-week").checked = true;
             document.getElementById("move-scope-default").checked = false;
@@ -1507,17 +1525,23 @@
                 const student = resolveMoveModalStudent(data.students, name);
                 if (!student) return;
 
+                const key = overrideKey(student);
+
                 if (scope === 'week') {
                     // 이번 주차에만 임시로 반영. 강사의 기본 시간표(student.slotIds)는 그대로 유지되어 다음 주차부터 자동 복원됨.
+                    // 동명이인 학생이 있을 수 있어 이름+학교 키로 저장한다.
                     if (!weeklyOverrides[currentSelectedWeek]) weeklyOverrides[currentSelectedWeek] = {};
                     if (!weeklyOverrides[currentSelectedWeek][teacherName]) weeklyOverrides[currentSelectedWeek][teacherName] = {};
-                    weeklyOverrides[currentSelectedWeek][teacherName][name] = { slotIds: checkedIds.slice() };
+                    const teacherWeek = weeklyOverrides[currentSelectedWeek][teacherName];
+                    teacherWeek[key] = { slotIds: checkedIds.slice() };
+                    if (key !== name) delete teacherWeek[name];
                 } else {
                     // 기본 시간표 자체를 변경. 이번 주차에 걸려있던 임시 이동 기록은 정리한다.
                     student.slotIds = checkedIds.slice();
                     delete student.slotId;
                     const wk = weeklyOverrides[currentSelectedWeek];
-                    if (wk && wk[teacherName] && wk[teacherName][name]) {
+                    if (wk && wk[teacherName]) {
+                        delete wk[teacherName][key];
                         delete wk[teacherName][name];
                     }
                 }
@@ -1556,7 +1580,9 @@
             if (!moveModalStudentName || !moveModalTeacherName) return;
             if (!confirm("이번 주차의 임시 시간표 설정을 지우고 기본 시간표로 돌리시겠습니까?")) return;
 
-            clearWeeklyOverride(moveModalTeacherName, moveModalStudentName, currentSelectedWeek);
+            const data = teacherDataStore[moveModalTeacherName];
+            const student = data ? resolveMoveModalStudent(data.students, moveModalStudentName) : null;
+            clearWeeklyOverride(moveModalTeacherName, student, currentSelectedWeek);
 
             const currentTeacher = getCurrentActiveTeacher();
             if (currentTeacher === "통합출석부") {
@@ -1950,7 +1976,7 @@
                         slotStudents.forEach(s => {
                             const rec = getStudentRecord(s.name, slot.id);
                             const isAtt = rec.status === '출석';
-                            const isTemp = hasWeeklyOverride(tName, s.name, currentSelectedWeek);
+                            const isTemp = hasWeeklyOverride(tName, s, currentSelectedWeek);
                             const isNewThisWeek = s.firstWeekKey === currentSelectedWeek;
 
                             const attBtnClass = isAtt ? "bg-[#dcfce7] text-[#15803d] font-bold" : "bg-zinc-100 text-zinc-500 font-semibold";
@@ -2045,7 +2071,7 @@
                     slotStudents.forEach(s => {
                         const rec = getStudentRecord(s.name, slot.id);
                         const isAtt = rec.status === '출석';
-                        const isTemp = hasWeeklyOverride(teacherName, s.name, currentSelectedWeek);
+                        const isTemp = hasWeeklyOverride(teacherName, s, currentSelectedWeek);
                         const isNewThisWeek = s.firstWeekKey === currentSelectedWeek;
 
                         const attBtnClass = isAtt ? "bg-[#dcfce7] text-[#15803d] font-bold" : "bg-zinc-100 text-zinc-500 font-semibold";
