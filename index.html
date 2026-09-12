@@ -523,6 +523,7 @@
         var moveModalStudentName = null;
         var moveModalTeacherName = null;
         var moveModalMultiNames = null; // 다중 선택 이동 모달일 때만 배열(학생 이름 목록), 단일 학생 이동일 땐 null
+        var moveModalAnchorSlotId = null; // 더블클릭한 시간대 칸의 slotId. 동명이인 학생을 구분하기 위한 용도(단일 이동 모달에서만 사용)
         var moveSelectionModeActive = false;
         var moveSelectedStudents = []; // [{name, teacherName, slotId}, ...] - 시간대 카드(칸) 단위로 선택됨
 
@@ -1354,13 +1355,14 @@
         }
 
         // ===== 학생 블록 더블클릭 -> 시간표 등록(다중 선택) 관리 모달 =====
-        function openMoveModal(studentName, teacherName) {
+        function openMoveModal(studentName, teacherName, anchorSlotId) {
             const data = teacherDataStore[teacherName];
             if (!data) return;
 
             moveModalStudentName = studentName;
             moveModalTeacherName = teacherName;
             moveModalMultiNames = null;
+            moveModalAnchorSlotId = anchorSlotId || null;
 
             document.getElementById("move-modal-student-name").innerText = `${studentName} (${teacherName}T)`;
             document.getElementById("move-modal-week-label").innerText = currentSelectedWeek;
@@ -1386,6 +1388,7 @@
             moveModalStudentName = null;
             moveModalTeacherName = teacherName;
             moveModalMultiNames = studentNames.slice();
+            moveModalAnchorSlotId = null;
 
             const titleText = studentNames.length <= 3 ? studentNames.join(', ') : `${studentNames.length}명 일괄`;
             document.getElementById("move-modal-student-name").innerText = `${titleText} (${teacherName}T)`;
@@ -1466,6 +1469,20 @@
             moveModalStudentName = null;
             moveModalTeacherName = null;
             moveModalMultiNames = null;
+            moveModalAnchorSlotId = null;
+        }
+
+        // 같은 강사 밑에 동명이인 학생이 있을 때 이름만으로 찾으면 항상 배열상 먼저 나오는 쪽이 걸려서
+        // 엉뚱한 학생의 시간표가 바뀌는 사고가 났었음. 더블클릭 당시의 slotId(moveModalAnchorSlotId)로
+        // 실제로 그 칸에 있던 학생을 우선적으로 찾는다. 동명이인이 없으면 기존과 동일하게 동작.
+        function resolveMoveModalStudent(students, name) {
+            const candidates = students.filter(s => s.name === name);
+            if (candidates.length <= 1) return candidates[0] || null;
+            if (moveModalAnchorSlotId) {
+                const anchored = candidates.find(s => getStudentSlotIds(s).includes(moveModalAnchorSlotId));
+                if (anchored) return anchored;
+            }
+            return candidates[0];
         }
 
         function saveMoveModalSelection() {
@@ -1487,7 +1504,7 @@
             const teacherName = moveModalTeacherName;
 
             targetNames.forEach(name => {
-                const student = data.students.find(s => s.name === name);
+                const student = resolveMoveModalStudent(data.students, name);
                 if (!student) return;
 
                 if (scope === 'week') {
@@ -1513,7 +1530,7 @@
                 const slotIdsToApply = checkedIds.slice();
                 saveTeacherData(teacherName, (freshData) => {
                     targetNames.forEach(name => {
-                        const target = freshData.students.find(s => s.name === name);
+                        const target = resolveMoveModalStudent(freshData.students, name);
                         if (!target) return;
                         target.slotIds = slotIdsToApply.slice();
                         delete target.slotId;
@@ -1942,7 +1959,7 @@
                             const newNameClass = isNewThisWeek ? "bg-red-100" : "";
 
                             studentsHtml += `
-                                <div class="student-block flex items-center p-2 rounded-lg border border-zinc-200 bg-white shadow-sm hover:border-primary" data-student-name="${s.name}" data-teacher-name="${tName}" data-slot-id="${slot.id}" onclick="handleStudentBlockClick(event, '${s.name}', '${tName}', '${slot.id}')" ondblclick="openMoveModal('${s.name}', '${tName}')" title="더블클릭하면 시간표 이동이 가능합니다">
+                                <div class="student-block flex items-center p-2 rounded-lg border border-zinc-200 bg-white shadow-sm hover:border-primary" data-student-name="${s.name}" data-teacher-name="${tName}" data-slot-id="${slot.id}" onclick="handleStudentBlockClick(event, '${s.name}', '${tName}', '${slot.id}')" ondblclick="openMoveModal('${s.name}', '${tName}', '${slot.id}')" title="더블클릭하면 시간표 이동이 가능합니다">
                                     <div class="w-24 shrink-0 truncate mr-1.5">
                                         <span class="font-bold text-xs text-zinc-900 ${newNameClass}">${s.name}</span>
                                         <span class="text-[10px] text-zinc-500">(${s.school})</span>
@@ -2037,7 +2054,7 @@
                         const newNameClass = isNewThisWeek ? "bg-red-100" : "";
 
                         studentsHtml += `
-                            <div class="student-block flex items-center p-2 rounded-lg border border-zinc-200 bg-white shadow-sm hover:border-primary" data-student-name="${s.name}" data-teacher-name="${teacherName}" data-slot-id="${slot.id}" onclick="handleStudentBlockClick(event, '${s.name}', '${teacherName}', '${slot.id}')" ondblclick="openMoveModal('${s.name}', '${teacherName}')" title="더블클릭하면 시간표 이동이 가능합니다">
+                            <div class="student-block flex items-center p-2 rounded-lg border border-zinc-200 bg-white shadow-sm hover:border-primary" data-student-name="${s.name}" data-teacher-name="${teacherName}" data-slot-id="${slot.id}" onclick="handleStudentBlockClick(event, '${s.name}', '${teacherName}', '${slot.id}')" ondblclick="openMoveModal('${s.name}', '${teacherName}', '${slot.id}')" title="더블클릭하면 시간표 이동이 가능합니다">
                                 <div class="w-24 shrink-0 truncate mr-1.5">
                                     <span class="font-bold text-xs text-zinc-900 ${newNameClass}">${s.name}</span>
                                     <span class="text-[10px] text-zinc-500">(${s.school})</span>
@@ -2621,7 +2638,7 @@
             if (!moveModalStudentName || !moveModalTeacherName) return;
             const data = teacherDataStore[moveModalTeacherName];
             if (!data) return;
-            const student = data.students.find(s => s.name === moveModalStudentName);
+            const student = resolveMoveModalStudent(data.students, moveModalStudentName);
             if (!student) return;
 
             if (!confirm(`${student.name} 학생을 ${currentSelectedWeek} 출석부에서만 삭제하시겠습니까?\n\n다른 주차 출석부에는 영향을 주지 않습니다.`)) return;
@@ -2634,7 +2651,7 @@
             const studentName = moveModalStudentName;
             const weekToExclude = currentSelectedWeek;
             saveTeacherData(moveModalTeacherName, (freshData) => {
-                const target = freshData.students.find(s => s.name === studentName);
+                const target = resolveMoveModalStudent(freshData.students, studentName);
                 if (!target) return;
                 if (!Array.isArray(target.excludedWeeks)) target.excludedWeeks = [];
                 if (!target.excludedWeeks.includes(weekToExclude)) target.excludedWeeks.push(weekToExclude);
