@@ -772,7 +772,25 @@
         }
 
         // 학생 완전 제거: 최신본을 다시 받아서 같은 삭제 로직을 그 위에 다시 적용(replay)한다.
-        async function purgeStudentEverywhere(teacherName, studentName) {
+        // 이름만으로 지우면 같은 강사 밑에 학교만 다른 동명이인의 출석 기록까지 같이 지워질 수 있어서,
+        // 이 학생이 실제로 쓴 슬롯(기본 시간표 + 과거 주차별 임시 이동분)만 지운다.
+        async function purgeStudentEverywhere(teacherName, student) {
+            const studentName = student.name;
+            const identityKey = overrideKey(student);
+            const ownSlotIds = new Set(getStudentSlotIds(student));
+
+            // 과거 주차에 이 학생이 임시로 옮겨졌던 슬롯도 출석 기록에 남아있을 수 있으므로 함께 수집한다.
+            const remoteOverridesForScan = await fetchLatestRemoteData('weeklyOverrides');
+            const overridesSnapshot = remoteOverridesForScan || weeklyOverrides;
+            Object.values(overridesSnapshot || {}).forEach(wk => {
+                const teacherWeek = wk && wk[teacherName];
+                if (!teacherWeek) return;
+                const entry = teacherWeek[identityKey] || (identityKey === studentName ? null : teacherWeek[studentName]);
+                if (entry && Array.isArray(entry.slotIds)) {
+                    entry.slotIds.forEach(id => ownSlotIds.add(id));
+                }
+            });
+
             await enqueueSave('attendanceRecords', async () => {
                 const remoteAttendance = await fetchLatestRemoteData('attendanceRecords');
                 if (remoteAttendance) attendanceRecords = remoteAttendance;
@@ -780,7 +798,15 @@
                     const weekRecords = attendanceRecords[weekKey];
                     if (!weekRecords) return;
                     Object.keys(weekRecords).forEach(key => {
-                        if (key === studentName || key.startsWith(`${studentName}__`)) {
+                        if (key === studentName) {
+                            delete weekRecords[key];
+                            return;
+                        }
+                        const sep = key.lastIndexOf('__');
+                        if (sep === -1) return;
+                        const keyName = key.slice(0, sep);
+                        const keySlotId = key.slice(sep + 2);
+                        if (keyName === studentName && ownSlotIds.has(keySlotId)) {
                             delete weekRecords[key];
                         }
                     });
@@ -793,9 +819,10 @@
                 if (remoteOverrides) weeklyOverrides = remoteOverrides;
                 Object.keys(weeklyOverrides).forEach(weekKey => {
                     const wk = weeklyOverrides[weekKey];
-                    if (wk && wk[teacherName] && wk[teacherName][studentName]) {
-                        delete wk[teacherName][studentName];
-                    }
+                    if (!wk || !wk[teacherName]) return;
+                    const teacherWeek = wk[teacherName];
+                    if (teacherWeek[identityKey]) delete teacherWeek[identityKey];
+                    if (identityKey === studentName && teacherWeek[studentName]) delete teacherWeek[studentName];
                 });
                 await saveDataToSupabase('weeklyOverrides', weeklyOverrides);
             });
@@ -2663,14 +2690,14 @@
             const today = new Date();
             const deletedAt = getFormattedDate(today);
             const deletedWeekKey = computeWeekKeyForDate(new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000));
-            const studentName = student.name;
+            const studentKey = overrideKey(student);
 
             student.status = 'deleted';
             student.deletedAt = deletedAt;
             student.deletedWeekKey = deletedWeekKey;
 
             saveTeacherData(teacherName, (freshData) => {
-                const target = freshData.students.find(s => s.name === studentName && s.status !== 'deleted');
+                const target = freshData.students.find(s => overrideKey(s) === studentKey && s.status !== 'deleted');
                 if (!target) return;
                 target.status = 'deleted';
                 target.deletedAt = deletedAt;
@@ -2730,14 +2757,15 @@
             const student = data.students[index];
             if (!student) return null;
 
-            const studentName = student.name;
+            const studentSnapshot = { ...student };
+            const studentKey = overrideKey(student);
             data.students.splice(index, 1);
 
             saveTeacherData(teacherName, (freshData) => {
-                const idx = freshData.students.findIndex(s => s.name === studentName);
+                const idx = freshData.students.findIndex(s => overrideKey(s) === studentKey);
                 if (idx !== -1) freshData.students.splice(idx, 1);
             });
-            purgeStudentEverywhere(teacherName, studentName);
+            purgeStudentEverywhere(teacherName, studentSnapshot);
 
             return student;
         }
