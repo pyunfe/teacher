@@ -525,7 +525,8 @@
         var moveModalStudentIdentityKey = null; // 실제 저장/조회에 쓰는 이름+학교 식별 키 (단일 이동 모달)
         var moveModalTeacherName = null;
         var moveModalMultiNames = null; // 다중 선택 이동 모달일 때만 배열(학생 식별 키 목록), 단일 학생 이동일 땐 null
-        var moveModalAnchorSlotId = null; // 더블클릭한 시간대 칸의 slotId. 동명이인 학생을 구분하기 위한 용도(단일 이동 모달에서만 사용)
+        var moveModalAnchorSlotId = null; // 더블클릭한 시간대 칸의 slotId. 단일 이동 모달에서 "이번 주만 이동" 시 어느 시간대에서 빼야 하는지 특정하는 용도
+        var moveModalMultiAnchors = null; // 다중 선택 이동 모달일 때만 { identityKey: [slotId, ...] } - 학생별로 선택했던 원래 칸(들)
         var moveSelectionModeActive = false;
         var moveSelectedStudents = []; // [{name, teacherName, slotId, identityKey}, ...] - 시간대 카드(칸) 단위로 선택됨
 
@@ -786,8 +787,15 @@
                 const teacherWeek = wk && wk[teacherName];
                 if (!teacherWeek) return;
                 const entry = teacherWeek[identityKey] || (identityKey === studentName ? null : teacherWeek[studentName]);
-                if (entry && Array.isArray(entry.slotIds)) {
-                    entry.slotIds.forEach(id => ownSlotIds.add(id));
+                if (!entry) return;
+                if (Array.isArray(entry.slotIds)) {
+                    entry.slotIds.forEach(id => ownSlotIds.add(id)); // 옛 형식(하위 호환)
+                }
+                if (Array.isArray(entry.moves)) {
+                    entry.moves.forEach(move => {
+                        (move.from || []).forEach(id => ownSlotIds.add(id));
+                        (move.to || []).forEach(id => ownSlotIds.add(id));
+                    });
                 }
             });
 
@@ -1264,16 +1272,6 @@
             return !!getWeeklyOverride(teacherName, student, weekKey);
         }
 
-        function setWeeklyOverride(teacherName, student, weekKey, slotIds) {
-            if (!weeklyOverrides[weekKey]) weeklyOverrides[weekKey] = {};
-            if (!weeklyOverrides[weekKey][teacherName]) weeklyOverrides[weekKey][teacherName] = {};
-            const teacherWeek = weeklyOverrides[weekKey][teacherName];
-            const key = overrideKey(student);
-            teacherWeek[key] = { slotIds: slotIds.slice() };
-            if (student && key !== student.name) delete teacherWeek[student.name];
-            saveWeeklyOverridesForTeacher(weekKey, teacherName);
-        }
-
         function clearWeeklyOverride(teacherName, student, weekKey) {
             const wk = weeklyOverrides[weekKey];
             if (!wk || !wk[teacherName]) return;
@@ -1285,11 +1283,59 @@
             if (changed) saveWeeklyOverridesForTeacher(weekKey, teacherName);
         }
 
-        // 해당 주차에 실제로 표시될 시간대 ID 목록 (임시 이동이 있으면 그것을, 없으면 강사별 기본 시간표를 반환)
+        // override 저장 형식 두 가지를 함께 지원한다:
+        // - 옛 형식 { slotIds: [...] }: 그 주차의 시간표 전체를 통째로 교체(이 값이 곧 effective 목록).
+        //   이미 저장돼있던 과거 기록과의 하위 호환을 위해 남겨둠 — 안 건드린 시간대까지 "임시"로
+        //   보이는 게 이 형식의 한계였음.
+        // - 새 형식 { moves: [{from:[slotId,...], to:[slotId,...]}, ...] }: "어느 시간대에서 어느
+        //   시간대로 옮겼는지"만 diff로 기록. from에 없는 원래 시간대(예: 같은 학생의 다른 요일 수업)는
+        //   전혀 건드리지 않고 그대로 기본 시간표로 유지된다.
+        // weeklyOverrides 객체를 로컬에서만 갱신한다(저장은 호출부에서 saveWeeklyOverridesForTeacher로 한 번에).
+        function applyWeeklyMove(teacherName, student, weekKey, fromSlotIds, toSlotIds) {
+            if (!weeklyOverrides[weekKey]) weeklyOverrides[weekKey] = {};
+            if (!weeklyOverrides[weekKey][teacherName]) weeklyOverrides[weekKey][teacherName] = {};
+            const teacherWeek = weeklyOverrides[weekKey][teacherName];
+            const key = overrideKey(student);
+
+            const existing = teacherWeek[key] || (student && teacherWeek[student.name]);
+            const moves = (existing && Array.isArray(existing.moves)) ? existing.moves.slice() : [];
+            // 이미 같은 시간대에서 나가는 move가 있으면(그 시간대를 이번 주에 또 다시 옮기는 경우) 대체한다.
+            const remainingMoves = moves.filter(m => !(m.from || []).some(id => fromSlotIds.includes(id)));
+            remainingMoves.push({ from: fromSlotIds.slice(), to: toSlotIds.slice() });
+
+            teacherWeek[key] = { moves: remainingMoves };
+            if (student && key !== student.name) delete teacherWeek[student.name];
+        }
+
+        // 해당 주차에 실제로 표시될 시간대 ID 목록 (임시 이동이 있으면 그것을 반영, 없으면 강사별 기본 시간표를 반환)
         function getEffectiveSlotIds(teacherName, student, weekKey) {
             const override = getWeeklyOverride(teacherName, student, weekKey);
-            if (override) return override.slotIds.slice();
-            return getStudentSlotIds(student);
+            const base = getStudentSlotIds(student);
+            if (!override) return base;
+            if (Array.isArray(override.slotIds)) return override.slotIds.slice(); // 옛 형식(하위 호환)
+
+            let result = base.slice();
+            (override.moves || []).forEach(move => {
+                result = result.filter(id => !(move.from || []).includes(id));
+                (move.to || []).forEach(id => { if (!result.includes(id)) result.push(id); });
+            });
+            return result;
+        }
+
+        // 이번 주차에 "임시로 새로 들어온" 시간대인지(=배지를 표시할지) 판단.
+        // 기본 시간표에 원래 있던 시간대는 같은 학생의 다른 시간대가 옮겨졌어도 임시 표시하지 않는다.
+        function getTempSlotIdSet(teacherName, student, weekKey) {
+            const override = getWeeklyOverride(teacherName, student, weekKey);
+            if (!override) return null;
+            if (Array.isArray(override.slotIds)) return new Set(override.slotIds); // 옛 형식(하위 호환): 전부 임시 표시
+            const set = new Set();
+            (override.moves || []).forEach(move => (move.to || []).forEach(id => set.add(id)));
+            return set;
+        }
+
+        function isSlotTempForStudent(teacherName, student, weekKey, slotId) {
+            const set = getTempSlotIdSet(teacherName, student, weekKey);
+            return !!set && set.has(slotId);
         }
 
         function parseSlotChoiceInput(input, allSlots) {
@@ -1408,6 +1454,7 @@
             moveModalStudentName = studentName;
             moveModalTeacherName = teacherName;
             moveModalMultiNames = null;
+            moveModalMultiAnchors = null;
             moveModalAnchorSlotId = anchorSlotId || null;
 
             document.getElementById("move-modal-student-name").innerText = `${studentName} (${teacherName}T)`;
@@ -1430,7 +1477,8 @@
 
         // 시간표 이동 선택 모드에서 고른 여러 학생을 한 번에 같은 시간대로 옮기기 위한 모달
         // studentKeys는 이름이 아니라 overrideKey(이름+학교) 식별 키 목록 — 동명이인을 구분하기 위함
-        function openMoveModalMulti(teacherName, studentKeys) {
+        // anchorsByKey: { identityKey: [slotId, ...] } - 학생별로 선택했던 원래 칸(이번 주만 이동 시 어디서 빼낼지)
+        function openMoveModalMulti(teacherName, studentKeys, anchorsByKey) {
             const data = teacherDataStore[teacherName];
             if (!data || studentKeys.length === 0) return;
 
@@ -1438,6 +1486,7 @@
             moveModalStudentIdentityKey = null;
             moveModalTeacherName = teacherName;
             moveModalMultiNames = studentKeys.slice();
+            moveModalMultiAnchors = anchorsByKey || null;
             moveModalAnchorSlotId = null;
 
             const displayNames = studentKeys.map(displayNameFromIdentityKey);
@@ -1509,6 +1558,8 @@
 
         // 단일/다중 모드에 맞춰 체크 상태를 계산해서 다시 그림. 다중 모드에서는 이동 범위(라디오)를 바꿀 때마다 호출됨.
         // 임시 이동/기본 시간표 변경 모두 학생마다(또는 이미 걸려있던 설정과) 헷갈리지 않도록 항상 빈 상태로 시작.
+        // (여기서 체크하는 시간대는 "그쪽으로 새로 추가/이동해 들어갈 시간대"만 의미함 — 건드리지 않은
+        // 기존 시간대는 saveMoveModalSelection에서 anchorSlotId 기준으로 알아서 그대로 유지됨)
         function renderMoveModalSlotList() {
             if (!moveModalTeacherName) return;
 
@@ -1521,6 +1572,7 @@
             moveModalStudentIdentityKey = null;
             moveModalTeacherName = null;
             moveModalMultiNames = null;
+            moveModalMultiAnchors = null;
             moveModalAnchorSlotId = null;
         }
 
@@ -1574,12 +1626,12 @@
 
                 if (scope === 'week') {
                     // 이번 주차에만 임시로 반영. 강사의 기본 시간표(student.slotIds)는 그대로 유지되어 다음 주차부터 자동 복원됨.
-                    // 동명이인 학생이 있을 수 있어 이름+학교 키로 저장한다.
-                    if (!weeklyOverrides[currentSelectedWeek]) weeklyOverrides[currentSelectedWeek] = {};
-                    if (!weeklyOverrides[currentSelectedWeek][teacherName]) weeklyOverrides[currentSelectedWeek][teacherName] = {};
-                    const teacherWeek = weeklyOverrides[currentSelectedWeek][teacherName];
-                    teacherWeek[key] = { slotIds: checkedIds.slice() };
-                    if (key !== student.name) delete teacherWeek[student.name];
+                    // "이동"으로 체크한 시간대(checkedIds)로 옮겨가는 건 이 학생이 원래 있던 칸(anchor)뿐이고,
+                    // 그 외에 같은 학생의 다른 시간대(다른 요일 수업 등)는 건드리지 않는다.
+                    const anchorIds = moveModalMultiNames
+                        ? (moveModalMultiAnchors && moveModalMultiAnchors[key] ? moveModalMultiAnchors[key] : getEffectiveSlotIds(teacherName, student, currentSelectedWeek))
+                        : (moveModalAnchorSlotId ? [moveModalAnchorSlotId] : getEffectiveSlotIds(teacherName, student, currentSelectedWeek));
+                    applyWeeklyMove(teacherName, student, currentSelectedWeek, anchorIds, checkedIds);
                 } else {
                     // 기본 시간표 자체를 변경. 이번 주차에 걸려있던 임시 이동 기록은 정리한다.
                     student.slotIds = checkedIds.slice();
@@ -1726,11 +1778,16 @@
         function openMoveModalForSelection() {
             if (moveSelectedStudents.length === 0) return;
             const teacherName = moveSelectedStudents[0].teacherName;
-            // 시간표 이동은 특정 시간대 하나가 아니라 학생의 시간표 전체를 재설정하는 기능이라,
-            // 같은 학생이 여러 시간대 카드로 선택되어 있어도 학생 단위로 한 번씩만 모은다.
+            // 같은 학생이 여러 시간대 카드로 선택되어 있을 수 있어 학생 단위(identityKey)로 묶되,
+            // "이번 주만 이동" 시 어느 칸(들)에서 빼내야 하는지 알 수 있도록 선택했던 slotId도 같이 모아둔다.
             // 이름이 아니라 identityKey(이름+학교)로 묶어야 동명이인 학생이 서로 뭉개지지 않는다.
-            const keys = [...new Set(moveSelectedStudents.map(x => x.identityKey))];
-            openMoveModalMulti(teacherName, keys);
+            const anchorsByKey = {};
+            moveSelectedStudents.forEach(x => {
+                if (!anchorsByKey[x.identityKey]) anchorsByKey[x.identityKey] = [];
+                if (!anchorsByKey[x.identityKey].includes(x.slotId)) anchorsByKey[x.identityKey].push(x.slotId);
+            });
+            const keys = Object.keys(anchorsByKey);
+            openMoveModalMulti(teacherName, keys, anchorsByKey);
         }
 
         // ===== 일괄 처리(선택된 여러 학생) - 시간표 이동 / 결석 처리 중 선택 =====
@@ -2027,7 +2084,7 @@
                         slotStudents.forEach(s => {
                             const rec = getStudentRecord(s.name, slot.id);
                             const isAtt = rec.status === '출석';
-                            const isTemp = hasWeeklyOverride(tName, s, currentSelectedWeek);
+                            const isTemp = isSlotTempForStudent(tName, s, currentSelectedWeek, slot.id);
                             const isNewThisWeek = s.firstWeekKey === currentSelectedWeek;
 
                             const attBtnClass = isAtt ? "bg-[#dcfce7] text-[#15803d] font-bold" : "bg-zinc-100 text-zinc-500 font-semibold";
@@ -2122,7 +2179,7 @@
                     slotStudents.forEach(s => {
                         const rec = getStudentRecord(s.name, slot.id);
                         const isAtt = rec.status === '출석';
-                        const isTemp = hasWeeklyOverride(teacherName, s, currentSelectedWeek);
+                        const isTemp = isSlotTempForStudent(teacherName, s, currentSelectedWeek, slot.id);
                         const isNewThisWeek = s.firstWeekKey === currentSelectedWeek;
 
                         const attBtnClass = isAtt ? "bg-[#dcfce7] text-[#15803d] font-bold" : "bg-zinc-100 text-zinc-500 font-semibold";
