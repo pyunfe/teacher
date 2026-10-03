@@ -392,8 +392,21 @@
                         <input type="date" id="student-modal-registered-at" class="w-full border border-zinc-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
                     </div>
                 </div>
+                <div id="student-modal-teacher-section" class="hidden space-y-2">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div class="space-y-1">
+                            <label class="text-xs font-semibold text-zinc-600">담당 강사</label>
+                            <select id="student-modal-teacher" onchange="onStudentModalTeacherChange()" class="w-full border border-zinc-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"></select>
+                        </div>
+                        <div class="space-y-1 hidden" id="student-modal-transfer-date-wrapper">
+                            <label class="text-xs font-semibold text-zinc-600">변경 적용일 (이 날짜가 속한 주차부터)</label>
+                            <input type="date" id="student-modal-transfer-date" onchange="updateStudentModalTransferHint()" class="w-full border border-zinc-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
+                        </div>
+                    </div>
+                    <div id="student-modal-transfer-hint" class="hidden text-xs text-sky-700 bg-sky-50 rounded-lg px-3 py-2 leading-relaxed"></div>
+                </div>
                 <div class="space-y-1.5">
-                    <label class="text-xs font-semibold text-zinc-600">시간표 배치 (여러 개 선택 가능)</label>
+                    <label class="text-xs font-semibold text-zinc-600" id="student-modal-slot-label">시간표 배치 (여러 개 선택 가능)</label>
                     <div id="student-modal-slot-list" class="space-y-3 border border-zinc-200 rounded-xl p-3 max-h-56 overflow-y-auto bg-zinc-50/50"></div>
                 </div>
                 <div id="student-modal-withdraw-section" class="hidden pt-3 border-t border-zinc-100 space-y-2">
@@ -410,33 +423,6 @@
         </div>
     </div>
 
-    <div id="transfer-modal" class="hidden fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onclick="if(event.target===this) closeTransferModal()">
-        <div class="bg-white rounded-2xl shadow-lg w-full max-w-lg max-h-[85vh] flex flex-col">
-            <div class="flex justify-between items-center p-4 border-b border-zinc-100">
-                <h3 class="font-bold text-base text-zinc-800" id="transfer-modal-title">담당 강사 변경</h3>
-                <button onclick="closeTransferModal()" class="text-zinc-400 hover:text-zinc-700 text-xl leading-none">&times;</button>
-            </div>
-            <div class="p-5 space-y-4 overflow-y-auto">
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div class="space-y-1">
-                        <label class="text-xs font-semibold text-zinc-600">새 담당 강사 *</label>
-                        <select id="transfer-modal-teacher" onchange="renderTransferSlotList()" class="w-full border border-zinc-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"></select>
-                    </div>
-                    <div class="space-y-1">
-                        <label class="text-xs font-semibold text-zinc-600">변경 적용일 (이 날짜가 속한 주차부터)</label>
-                        <input type="date" id="transfer-modal-date" onchange="updateTransferWeekHint()" class="w-full border border-zinc-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
-                    </div>
-                </div>
-                <div id="transfer-modal-hint" class="text-xs text-zinc-500 leading-relaxed"></div>
-                <div class="space-y-1.5">
-                    <label class="text-xs font-semibold text-zinc-600">새 강사의 시간표 배치 (여러 개 선택 가능)</label>
-                    <div id="transfer-modal-slot-list" class="space-y-3 border border-zinc-200 rounded-xl p-3 max-h-56 overflow-y-auto bg-zinc-50/50"></div>
-                </div>
-            </div>
-            <div class="flex justify-end space-x-2 p-4 border-t border-zinc-100">
-                <button onclick="closeTransferModal()" class="px-4 py-2 rounded-lg text-sm font-semibold text-zinc-600 hover:bg-zinc-100 transition">취소</button>
-                <button onclick="saveTransferModal()" class="px-4 py-2 rounded-lg text-sm font-semibold bg-primary text-white hover:bg-primary-hover transition">담당 변경</button>
-            </div>
         </div>
     </div>
 
@@ -2480,7 +2466,6 @@
                         <input type="checkbox" data-name="${s.name}" data-type="parent" data-phone="${s.parentPhone || ''}" onchange="updateSelectedCount()" ${!s.parentPhone ? 'disabled' : ''} class="recipient-checkbox w-3.5 h-3.5 text-primary rounded border-zinc-300 focus:ring-primary">
                         <span>학부모</span>
                     </label>
-                    ${isAdminLoggedIn ? `<button onclick="openTransferModal('${teacherName}', ${idx})" class="text-[11px] bg-sky-50 hover:bg-sky-100 text-sky-700 px-2.5 py-1 rounded font-semibold transition">담당변경</button>` : ''}
                     ${isAdminLoggedIn ? `<button onclick="openEditStudentModal('${teacherName}', ${idx})" class="text-[11px] bg-zinc-200 hover:bg-zinc-300 text-zinc-700 px-2.5 py-1 rounded font-semibold transition">수정</button>` : ''}
                     ${isAdminLoggedIn ? `<button onclick="handleDeleteStudent('${teacherName}', ${idx})" class="text-[11px] bg-rose-50 hover:bg-rose-100 text-rose-600 px-2.5 py-1 rounded font-semibold transition">삭제</button>` : ''}
                 </div>
@@ -2601,53 +2586,23 @@
             // 등록일: 기존 값이 있으면 그대로, 없으면(과거에 등록일 없이 들어간 학생/신규 등록) 오늘 날짜를 기본값으로 채워줌
             document.getElementById("student-modal-registered-at").value = (student && student.registeredAt) ? student.registeredAt : getFormattedDate(new Date());
 
-            const currentSlotIds = student ? getStudentSlotIds(student) : [];
-            const dayNameKo = { friday: '금요일', saturday: '토요일', sunday: '일요일' };
-            const listContainer = document.getElementById("student-modal-slot-list");
-            listContainer.innerHTML = "";
-
-            let hasAnySlot = false;
-            ['friday', 'saturday', 'sunday'].forEach(day => {
-                const daySlots = getSortedSlots(data.slots[day] || []);
-                if (daySlots.length === 0) return;
-                hasAnySlot = true;
-
-                const dayBlock = document.createElement("div");
-                const dayTitle = document.createElement("div");
-                dayTitle.className = "text-xs font-bold text-zinc-500 mb-1.5";
-                dayTitle.innerText = dayNameKo[day];
-                dayBlock.appendChild(dayTitle);
-
-                const slotWrap = document.createElement("div");
-                slotWrap.className = "space-y-1.5";
-
-                daySlots.forEach(slot => {
-                    const isChecked = currentSlotIds.includes(slot.id);
-                    const label = document.createElement("label");
-                    label.className = "flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-semibold border border-zinc-200 bg-white hover:border-primary cursor-pointer transition";
-
-                    const checkbox = document.createElement("input");
-                    checkbox.type = "checkbox";
-                    checkbox.value = slot.id;
-                    checkbox.checked = isChecked;
-                    checkbox.className = "student-modal-slot-checkbox w-4 h-4 text-primary rounded border-zinc-300 focus:ring-primary";
-
-                    const textSpan = document.createElement("span");
-                    textSpan.className = "text-zinc-700";
-                    textSpan.innerText = slot.title;
-
-                    label.appendChild(checkbox);
-                    label.appendChild(textSpan);
-                    slotWrap.appendChild(label);
+            // 담당 강사 칸: 수정 모드에서만 노출. 다른 강사를 고르면 변경 적용일 + 그 강사의 시간표 목록으로 바뀜.
+            const teacherSection = document.getElementById("student-modal-teacher-section");
+            teacherSection.classList.toggle("hidden", mode !== 'edit');
+            if (mode === 'edit') {
+                const sel = document.getElementById("student-modal-teacher");
+                sel.innerHTML = "";
+                orderedTeacherNames.filter(t => t === teacherName || teacherDataStore[t]).forEach(t => {
+                    const opt = document.createElement("option");
+                    opt.value = t;
+                    opt.innerText = `${t}T`;
+                    if (t === teacherName) opt.selected = true;
+                    sel.appendChild(opt);
                 });
-
-                dayBlock.appendChild(slotWrap);
-                listContainer.appendChild(dayBlock);
-            });
-
-            if (!hasAnySlot) {
-                listContainer.innerHTML = '<div class="text-xs text-zinc-400 text-center py-6">먼저 출석부 탭에서 시간대 박스를 생성해주세요.</div>';
+                document.getElementById("student-modal-transfer-date").value = getFormattedDate(new Date());
             }
+            renderStudentModalSlotList();
+            updateStudentModalTransferUi();
 
             // 삭제 버튼 영역: 수정 모드에서만 노출.
             const withdrawSection = document.getElementById("student-modal-withdraw-section");
@@ -2695,6 +2650,14 @@
             const chosenIds = Array.from(document.querySelectorAll('.student-modal-slot-checkbox:checked')).map(cb => cb.value);
             if (chosenIds.length === 0) {
                 alert("최소 1개 이상의 시간표를 선택해주세요.");
+                return;
+            }
+
+            if (isStudentModalTransfer()) {
+                const newTeacher = document.getElementById("student-modal-teacher").value;
+                if (!performTeacherTransfer(teacherName, newTeacher, { name, school, phone, parentPhone }, chosenIds)) return;
+                closeStudentModal();
+                refreshAfterStudentListChange(teacherName);
                 return;
             }
 
@@ -2767,124 +2730,124 @@
             return { status: 'ambiguous', candidates };
         }
 
-        // ===== 담당 강사 변경 (이번 주차부터) =====
+        // ===== 담당 강사 변경 (이번 주차부터) — 학생 수정 모달의 '담당 강사' 칸에서 처리 =====
         // 기존 담당 강사 쪽: 퇴원(삭제)과 같은 방식으로 deletedWeekKey=적용 주차의 전 주차로 기록 -> 그 전 주차 출석부/기록은 그대로 보임.
         //   (원생 목록에서는 숨겨지고, 미니윤철도 status:'deleted'는 무시함. transferredTo로 퇴원과 구분)
         // 새 담당 강사 쪽: 같은 학생을 firstWeekKey=적용 주차로 추가 -> 그 주차부터 출석부에 표시. '신규' 표시는 transferredFrom으로 제외.
-        var transferModalTeacherName = null;
-        var transferModalStudentKey = null;
-
-        function openTransferModal(teacherName, index) {
-            if (!isAdminLoggedIn) return;
-            const data = teacherDataStore[teacherName];
-            const student = data && data.students[index];
-            if (!student) return;
-            transferModalTeacherName = teacherName;
-            transferModalStudentKey = overrideKey(student);
-
-            document.getElementById("transfer-modal-title").innerText = `담당 강사 변경 - ${student.name} (${student.school || ''}, 현재 ${teacherName}T)`;
-            const sel = document.getElementById("transfer-modal-teacher");
-            sel.innerHTML = "";
-            orderedTeacherNames.filter(t => t !== teacherName && teacherDataStore[t]).forEach(t => {
-                const opt = document.createElement("option");
-                opt.value = t;
-                opt.innerText = `${t}T`;
-                sel.appendChild(opt);
-            });
-            document.getElementById("transfer-modal-date").value = getFormattedDate(new Date());
-            renderTransferSlotList();
-            updateTransferWeekHint();
-            document.getElementById("transfer-modal").classList.remove("hidden");
+        function isStudentModalTransfer() {
+            if (studentModalMode !== 'edit') return false;
+            const sel = document.getElementById("student-modal-teacher");
+            return !!sel.value && sel.value !== studentModalTeacherName;
         }
 
-        function closeTransferModal() {
-            document.getElementById("transfer-modal").classList.add("hidden");
-            transferModalTeacherName = null;
-            transferModalStudentKey = null;
-        }
-
-        function getTransferWeekKeys() {
-            const dateObj = parseYmdToLocalDate(document.getElementById("transfer-modal-date").value) || new Date();
-            const effectiveWeekKey = computeWeekKeyForDate(dateObj);
-            const prevWeekKey = computeWeekKeyForDate(new Date(dateObj.getTime() - 7 * 24 * 60 * 60 * 1000));
-            return { effectiveWeekKey, prevWeekKey };
-        }
-
-        function updateTransferWeekHint() {
-            const { effectiveWeekKey, prevWeekKey } = getTransferWeekKeys();
-            document.getElementById("transfer-modal-hint").innerText =
-                `${prevWeekKey}까지는 ${transferModalTeacherName || '현재'}T 출석부(기록 유지), ${effectiveWeekKey}부터는 새 담당 강사 출석부에 표시됩니다.`;
-        }
-
-        function renderTransferSlotList() {
-            const listContainer = document.getElementById("transfer-modal-slot-list");
+        // 시간표 목록: 담당 강사를 바꾸면 새 강사의 시간표(전부 미선택), 그대로면 학생의 현재 배정 표시
+        function renderStudentModalSlotList() {
+            const transferring = isStudentModalTransfer();
+            const slotTeacher = transferring ? document.getElementById("student-modal-teacher").value : studentModalTeacherName;
+            const data = teacherDataStore[slotTeacher];
+            const listContainer = document.getElementById("student-modal-slot-list");
             listContainer.innerHTML = "";
-            const newTeacher = document.getElementById("transfer-modal-teacher").value;
-            const data = teacherDataStore[newTeacher];
             if (!data) return;
+            const student = (studentModalMode === 'edit' && !transferring) ? teacherDataStore[studentModalTeacherName].students[studentModalEditIndex] : null;
+            const currentSlotIds = student ? getStudentSlotIds(student) : [];
             const dayNameKo = { friday: '금요일', saturday: '토요일', sunday: '일요일' };
+
             let hasAnySlot = false;
             ['friday', 'saturday', 'sunday'].forEach(day => {
                 const daySlots = getSortedSlots(data.slots[day] || []);
                 if (daySlots.length === 0) return;
                 hasAnySlot = true;
+
                 const dayBlock = document.createElement("div");
                 const dayTitle = document.createElement("div");
                 dayTitle.className = "text-xs font-bold text-zinc-500 mb-1.5";
                 dayTitle.innerText = dayNameKo[day];
                 dayBlock.appendChild(dayTitle);
+
                 const slotWrap = document.createElement("div");
                 slotWrap.className = "space-y-1.5";
+
                 daySlots.forEach(slot => {
                     const label = document.createElement("label");
                     label.className = "flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-semibold border border-zinc-200 bg-white hover:border-primary cursor-pointer transition";
+
                     const checkbox = document.createElement("input");
                     checkbox.type = "checkbox";
                     checkbox.value = slot.id;
-                    checkbox.className = "transfer-modal-slot-checkbox w-4 h-4 text-primary rounded border-zinc-300 focus:ring-primary";
+                    checkbox.checked = currentSlotIds.includes(slot.id);
+                    checkbox.className = "student-modal-slot-checkbox w-4 h-4 text-primary rounded border-zinc-300 focus:ring-primary";
+
                     const textSpan = document.createElement("span");
                     textSpan.className = "text-zinc-700";
                     textSpan.innerText = slot.title;
+
                     label.appendChild(checkbox);
                     label.appendChild(textSpan);
                     slotWrap.appendChild(label);
                 });
+
                 dayBlock.appendChild(slotWrap);
                 listContainer.appendChild(dayBlock);
             });
+
             if (!hasAnySlot) {
-                listContainer.innerHTML = '<div class="text-xs text-zinc-400 text-center py-6">선택한 강사에게 시간대 박스가 없습니다.</div>';
+                listContainer.innerHTML = transferring
+                    ? '<div class="text-xs text-zinc-400 text-center py-6">선택한 강사에게 시간대 박스가 없습니다.</div>'
+                    : '<div class="text-xs text-zinc-400 text-center py-6">먼저 출석부 탭에서 시간대 박스를 생성해주세요.</div>';
             }
         }
 
-        function saveTransferModal() {
-            const oldTeacher = transferModalTeacherName;
-            const studentKey = transferModalStudentKey;
-            const newTeacher = document.getElementById("transfer-modal-teacher").value;
-            if (!oldTeacher || !studentKey || !newTeacher) return;
+        function onStudentModalTeacherChange() {
+            renderStudentModalSlotList();
+            updateStudentModalTransferUi();
+        }
+
+        function updateStudentModalTransferUi() {
+            const transferring = isStudentModalTransfer();
+            document.getElementById("student-modal-transfer-date-wrapper").classList.toggle("hidden", !transferring);
+            document.getElementById("student-modal-transfer-hint").classList.toggle("hidden", !transferring);
+            document.getElementById("student-modal-slot-label").innerText = transferring
+                ? "새 강사의 시간표 배치 (여러 개 선택 가능)"
+                : "시간표 배치 (여러 개 선택 가능)";
+            if (transferring) updateStudentModalTransferHint();
+        }
+
+        function getTransferWeekKeys() {
+            const dateObj = parseYmdToLocalDate(document.getElementById("student-modal-transfer-date").value) || new Date();
+            const effectiveWeekKey = computeWeekKeyForDate(dateObj);
+            const prevWeekKey = computeWeekKeyForDate(new Date(dateObj.getTime() - 7 * 24 * 60 * 60 * 1000));
+            return { effectiveWeekKey, prevWeekKey };
+        }
+
+        function updateStudentModalTransferHint() {
+            const { effectiveWeekKey, prevWeekKey } = getTransferWeekKeys();
+            document.getElementById("student-modal-transfer-hint").innerText =
+                `${prevWeekKey}까지는 ${studentModalTeacherName}T 출석부(기록 유지), ${effectiveWeekKey}부터는 새 담당 강사 출석부에 표시됩니다.`;
+        }
+
+        // 수정 모달에서 담당 강사를 바꿔 저장할 때 호출. edits = 모달에서 수정한 이름/학교/연락처, chosenIds = 새 강사의 시간표.
+        // 성공하면 true (모달을 닫아도 됨), 검증 실패/취소면 false.
+        function performTeacherTransfer(oldTeacher, newTeacher, edits, chosenIds) {
             const oldData = teacherDataStore[oldTeacher];
             const newData = teacherDataStore[newTeacher];
-            const student = oldData && oldData.students.find(s => overrideKey(s) === studentKey && s.status !== 'deleted');
-            if (!student || !newData) return;
+            const student = oldData && oldData.students[studentModalEditIndex];
+            if (!student || !newData) return false;
+            const studentKey = overrideKey(student);
 
-            const chosenIds = Array.from(document.querySelectorAll('.transfer-modal-slot-checkbox:checked')).map(cb => cb.value);
-            if (chosenIds.length === 0) {
-                alert("새 강사의 시간표를 1개 이상 선택해주세요.");
-                return;
-            }
-            if (newData.students.some(s => overrideKey(s) === studentKey && s.status !== 'deleted')) {
-                alert(`${newTeacher}T에 이미 같은 이름/학교의 학생이 있어 옮길 수 없습니다.`);
-                return;
-            }
             const { effectiveWeekKey, prevWeekKey } = getTransferWeekKeys();
+            const newKey = overrideKey({ name: edits.name, school: edits.school });
+            if (newData.students.some(s => overrideKey(s) === newKey && s.status !== 'deleted')) {
+                alert(`${newTeacher}T에 이미 같은 이름/학교의 학생이 있어 옮길 수 없습니다.`);
+                return false;
+            }
             if (student.firstWeekKey && student.firstWeekKey > prevWeekKey) {
                 alert(`${student.name} 학생은 ${student.firstWeekKey}부터 등록된 학생이라 ${effectiveWeekKey}부터 담당을 바꿀 수 없습니다. 더 늦은 날짜를 선택해주세요.`);
-                return;
+                return false;
             }
-            if (!confirm(`${student.name}(${student.school || ''}) 학생의 담당을\n${oldTeacher}T → ${newTeacher}T 로 ${effectiveWeekKey}부터 변경하시겠습니까?\n\n${prevWeekKey}까지의 출석 기록은 ${oldTeacher}T 출석부에 그대로 남습니다.`)) return;
+            if (!confirm(`${student.name}(${student.school || ''}) 학생의 담당을\n${oldTeacher}T → ${newTeacher}T 로 ${effectiveWeekKey}부터 변경하시겠습니까?\n\n${prevWeekKey}까지의 출석 기록은 ${oldTeacher}T 출석부에 그대로 남습니다.`)) return false;
 
             const transferredAt = getFormattedDate(new Date());
-            const newStudent = { name: student.name, school: student.school, phone: student.phone || '', parentPhone: student.parentPhone || '', slotIds: chosenIds, firstWeekKey: effectiveWeekKey, transferredFrom: oldTeacher, transferredAt };
+            const newStudent = { name: edits.name, school: edits.school, phone: edits.phone, parentPhone: edits.parentPhone, slotIds: chosenIds, firstWeekKey: effectiveWeekKey, transferredFrom: oldTeacher, transferredAt };
             if (student.registeredAt) newStudent.registeredAt = student.registeredAt;
 
             const markOld = (target) => {
@@ -2899,16 +2862,14 @@
 
             // 새 강사 쪽을 먼저 저장해서, 중간에 실패해도 학생이 어느 출석부에서도 안 보이는 상황은 생기지 않게 함
             saveTeacherData(newTeacher, (freshData) => {
-                if (freshData.students.some(s => overrideKey(s) === studentKey && s.status !== 'deleted')) return;
+                if (freshData.students.some(s => overrideKey(s) === newKey && s.status !== 'deleted')) return;
                 freshData.students.push({ ...newStudent });
             });
             saveTeacherData(oldTeacher, (freshData) => {
                 const target = freshData.students.find(s => overrideKey(s) === studentKey && s.status !== 'deleted');
                 if (target) markOld(target);
             });
-
-            closeTransferModal();
-            refreshAfterStudentListChange(oldTeacher);
+            return true;
         }
 
         // 삭제 처리: 삭제일은 항상 처리하는 "오늘" 날짜로 기록. isVisibleInWeek()는

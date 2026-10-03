@@ -45,7 +45,7 @@ curl -s -X PATCH "https://haaiwbjdlqwrfrvsurxi.supabase.co/rest/v1/app_data?id=e
   - `firstWeekKey`, `registeredAt` — **이번 주에 신규 등록된 학생에만 있음**. 원래 재원생이던 학생인데 이 필드가 잘못 생기면 "신규 등록"으로 잘못 표시되니 주의. 재원생을 수정할 때 이 필드를 새로 넣거나 건드리면 안 됨.
   - `status: 'deleted'`, `deletedAt`, `deletedWeekKey`, `excludedWeeks` — 퇴원/특정 주차 제외 처리된 학생
 
-- 담당 강사 변경(원생 관리 목록의 '담당변경' 버튼, `saveTransferModal`): 기존 강사 쪽 학생은 `status:'deleted'` + `deletedWeekKey`(적용 주차의 전 주차) + `transferredTo`/`transferredWeekKey`, 새 강사 쪽에는 같은 학생이 `firstWeekKey`(적용 주차) + `transferredFrom`/`transferredAt`으로 추가됨. 그래서 지난 주차 출석은 기존 강사 출석부에 남고 적용 주차부터 새 강사 출석부에 나옴('신규' 빨간 표시는 `transferredFrom`이 있으면 안 뜸). 수동으로 옮길 땐 학생을 통째로 이동시키지 말고 이 두 레코드 구조를 따를 것.
+- 담당 강사 변경(학생 수정 모달의 '담당 강사' 칸, `performTeacherTransfer`): 기존 강사 쪽 학생은 `status:'deleted'` + `deletedWeekKey`(적용 주차의 전 주차) + `transferredTo`/`transferredWeekKey`, 새 강사 쪽에는 같은 학생이 `firstWeekKey`(적용 주차) + `transferredFrom`/`transferredAt`으로 추가됨. 그래서 지난 주차 출석은 기존 강사 출석부에 남고 적용 주차부터 새 강사 출석부에 나옴('신규' 빨간 표시는 `transferredFrom`이 있으면 안 뜸). 수동으로 옮길 땐 학생을 통째로 이동시키지 말고 이 두 레코드 구조를 따를 것.
 
 ## 동명이인(같은 강사 내 이름 중복) 규칙 — 중요
 
