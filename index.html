@@ -410,6 +410,36 @@
         </div>
     </div>
 
+    <div id="transfer-modal" class="hidden fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onclick="if(event.target===this) closeTransferModal()">
+        <div class="bg-white rounded-2xl shadow-lg w-full max-w-lg max-h-[85vh] flex flex-col">
+            <div class="flex justify-between items-center p-4 border-b border-zinc-100">
+                <h3 class="font-bold text-base text-zinc-800" id="transfer-modal-title">담당 강사 변경</h3>
+                <button onclick="closeTransferModal()" class="text-zinc-400 hover:text-zinc-700 text-xl leading-none">&times;</button>
+            </div>
+            <div class="p-5 space-y-4 overflow-y-auto">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div class="space-y-1">
+                        <label class="text-xs font-semibold text-zinc-600">새 담당 강사 *</label>
+                        <select id="transfer-modal-teacher" onchange="renderTransferSlotList()" class="w-full border border-zinc-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"></select>
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-xs font-semibold text-zinc-600">변경 적용일 (이 날짜가 속한 주차부터)</label>
+                        <input type="date" id="transfer-modal-date" onchange="updateTransferWeekHint()" class="w-full border border-zinc-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
+                    </div>
+                </div>
+                <div id="transfer-modal-hint" class="text-xs text-zinc-500 leading-relaxed"></div>
+                <div class="space-y-1.5">
+                    <label class="text-xs font-semibold text-zinc-600">새 강사의 시간표 배치 (여러 개 선택 가능)</label>
+                    <div id="transfer-modal-slot-list" class="space-y-3 border border-zinc-200 rounded-xl p-3 max-h-56 overflow-y-auto bg-zinc-50/50"></div>
+                </div>
+            </div>
+            <div class="flex justify-end space-x-2 p-4 border-t border-zinc-100">
+                <button onclick="closeTransferModal()" class="px-4 py-2 rounded-lg text-sm font-semibold text-zinc-600 hover:bg-zinc-100 transition">취소</button>
+                <button onclick="saveTransferModal()" class="px-4 py-2 rounded-lg text-sm font-semibold bg-primary text-white hover:bg-primary-hover transition">담당 변경</button>
+            </div>
+        </div>
+    </div>
+
     <div id="slot-modal" class="hidden fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onclick="if(event.target===this) closeSlotModal()">
         <div class="bg-white rounded-2xl shadow-lg w-full max-w-md flex flex-col">
             <div class="flex justify-between items-center p-4 border-b border-zinc-100">
@@ -2085,11 +2115,12 @@
                             const rec = getStudentRecord(s.name, slot.id);
                             const isAtt = rec.status === '출석';
                             const isTemp = isSlotTempForStudent(tName, s, currentSelectedWeek, slot.id);
-                            const isNewThisWeek = s.firstWeekKey === currentSelectedWeek;
+                            const isNewThisWeek = s.firstWeekKey === currentSelectedWeek && !s.transferredFrom;
 
                             const attBtnClass = isAtt ? "bg-[#dcfce7] text-[#15803d] font-bold" : "bg-zinc-100 text-zinc-500 font-semibold";
                             const absBtnClass = !isAtt ? "bg-[#fee2e2] text-[#b91c1c] font-bold" : "bg-zinc-100 text-zinc-500 font-semibold";
                             const tempBadge = isTemp ? '<span class="text-[9px] bg-amber-100 text-amber-700 px-1 rounded ml-1 align-middle">임시</span>' : '';
+                        const transferBadge = (s.transferredFrom && s.firstWeekKey === currentSelectedWeek) ? `<span class="text-[9px] bg-sky-100 text-sky-700 px-1 rounded ml-1 align-middle">${s.transferredFrom}T에서</span>` : '';
                             const newNameClass = isNewThisWeek ? "bg-red-100" : "";
 
                             studentsHtml += `
@@ -2097,7 +2128,7 @@
                                     <div class="w-24 shrink-0 truncate mr-1.5">
                                         <span class="font-bold text-xs text-zinc-900 ${newNameClass}">${s.name}</span>
                                         <span class="text-[10px] text-zinc-500">(${s.school})</span>
-                                        ${tempBadge}
+                                        ${tempBadge}${transferBadge}
                                     </div>
                                     <div class="flex items-center space-x-1 shrink-0 mr-1.5">
                                         <button onclick="handleStatusClick('${s.name}', '${slot.id}', '출석', this)" class="px-2 py-0.5 text-[11px] rounded ${attBtnClass} status-btn">출석</button>
@@ -2180,11 +2211,12 @@
                         const rec = getStudentRecord(s.name, slot.id);
                         const isAtt = rec.status === '출석';
                         const isTemp = isSlotTempForStudent(teacherName, s, currentSelectedWeek, slot.id);
-                        const isNewThisWeek = s.firstWeekKey === currentSelectedWeek;
+                        const isNewThisWeek = s.firstWeekKey === currentSelectedWeek && !s.transferredFrom;
 
                         const attBtnClass = isAtt ? "bg-[#dcfce7] text-[#15803d] font-bold" : "bg-zinc-100 text-zinc-500 font-semibold";
                         const absBtnClass = !isAtt ? "bg-[#fee2e2] text-[#b91c1c] font-bold" : "bg-zinc-100 text-zinc-500 font-semibold";
                         const tempBadge = isTemp ? '<span class="text-[9px] bg-amber-100 text-amber-700 px-1 rounded ml-1 align-middle">임시</span>' : '';
+                        const transferBadge = (s.transferredFrom && s.firstWeekKey === currentSelectedWeek) ? `<span class="text-[9px] bg-sky-100 text-sky-700 px-1 rounded ml-1 align-middle">${s.transferredFrom}T에서</span>` : '';
                         const newNameClass = isNewThisWeek ? "bg-red-100" : "";
 
                         studentsHtml += `
@@ -2192,7 +2224,7 @@
                                 <div class="w-24 shrink-0 truncate mr-1.5">
                                     <span class="font-bold text-xs text-zinc-900 ${newNameClass}">${s.name}</span>
                                     <span class="text-[10px] text-zinc-500">(${s.school})</span>
-                                    ${tempBadge}
+                                    ${tempBadge}${transferBadge}
                                 </div>
                                 <div class="flex items-center space-x-1 shrink-0 mr-1.5">
                                     <button onclick="handleStatusClick('${s.name}', '${slot.id}', '출석', this)" class="px-2 py-0.5 text-[11px] rounded ${attBtnClass} status-btn">출석</button>
@@ -2448,6 +2480,7 @@
                         <input type="checkbox" data-name="${s.name}" data-type="parent" data-phone="${s.parentPhone || ''}" onchange="updateSelectedCount()" ${!s.parentPhone ? 'disabled' : ''} class="recipient-checkbox w-3.5 h-3.5 text-primary rounded border-zinc-300 focus:ring-primary">
                         <span>학부모</span>
                     </label>
+                    ${isAdminLoggedIn ? `<button onclick="openTransferModal('${teacherName}', ${idx})" class="text-[11px] bg-sky-50 hover:bg-sky-100 text-sky-700 px-2.5 py-1 rounded font-semibold transition">담당변경</button>` : ''}
                     ${isAdminLoggedIn ? `<button onclick="openEditStudentModal('${teacherName}', ${idx})" class="text-[11px] bg-zinc-200 hover:bg-zinc-300 text-zinc-700 px-2.5 py-1 rounded font-semibold transition">수정</button>` : ''}
                     ${isAdminLoggedIn ? `<button onclick="handleDeleteStudent('${teacherName}', ${idx})" class="text-[11px] bg-rose-50 hover:bg-rose-100 text-rose-600 px-2.5 py-1 rounded font-semibold transition">삭제</button>` : ''}
                 </div>
@@ -2676,7 +2709,7 @@
                 student.parentPhone = parentPhone;
                 student.slotIds = chosenIds;
                 student.registeredAt = registeredAt;
-                student.firstWeekKey = firstWeekKey;
+                if (!student.transferredFrom) student.firstWeekKey = firstWeekKey;
                 delete student.slotId;
 
                 applyPatch = (freshData) => {
@@ -2688,7 +2721,7 @@
                     target.parentPhone = parentPhone;
                     target.slotIds = chosenIds;
                     target.registeredAt = registeredAt;
-                    target.firstWeekKey = firstWeekKey;
+                    if (!target.transferredFrom) target.firstWeekKey = firstWeekKey;
                     delete target.slotId;
                 };
             } else if (studentModalAddType === 'existing') {
@@ -2732,6 +2765,150 @@
                 if (filtered.length === 1) return { status: 'unique', match: filtered[0] };
             }
             return { status: 'ambiguous', candidates };
+        }
+
+        // ===== 담당 강사 변경 (이번 주차부터) =====
+        // 기존 담당 강사 쪽: 퇴원(삭제)과 같은 방식으로 deletedWeekKey=적용 주차의 전 주차로 기록 -> 그 전 주차 출석부/기록은 그대로 보임.
+        //   (원생 목록에서는 숨겨지고, 미니윤철도 status:'deleted'는 무시함. transferredTo로 퇴원과 구분)
+        // 새 담당 강사 쪽: 같은 학생을 firstWeekKey=적용 주차로 추가 -> 그 주차부터 출석부에 표시. '신규' 표시는 transferredFrom으로 제외.
+        var transferModalTeacherName = null;
+        var transferModalStudentKey = null;
+
+        function openTransferModal(teacherName, index) {
+            if (!isAdminLoggedIn) return;
+            const data = teacherDataStore[teacherName];
+            const student = data && data.students[index];
+            if (!student) return;
+            transferModalTeacherName = teacherName;
+            transferModalStudentKey = overrideKey(student);
+
+            document.getElementById("transfer-modal-title").innerText = `담당 강사 변경 - ${student.name} (${student.school || ''}, 현재 ${teacherName}T)`;
+            const sel = document.getElementById("transfer-modal-teacher");
+            sel.innerHTML = "";
+            orderedTeacherNames.filter(t => t !== teacherName && teacherDataStore[t]).forEach(t => {
+                const opt = document.createElement("option");
+                opt.value = t;
+                opt.innerText = `${t}T`;
+                sel.appendChild(opt);
+            });
+            document.getElementById("transfer-modal-date").value = getFormattedDate(new Date());
+            renderTransferSlotList();
+            updateTransferWeekHint();
+            document.getElementById("transfer-modal").classList.remove("hidden");
+        }
+
+        function closeTransferModal() {
+            document.getElementById("transfer-modal").classList.add("hidden");
+            transferModalTeacherName = null;
+            transferModalStudentKey = null;
+        }
+
+        function getTransferWeekKeys() {
+            const dateObj = parseYmdToLocalDate(document.getElementById("transfer-modal-date").value) || new Date();
+            const effectiveWeekKey = computeWeekKeyForDate(dateObj);
+            const prevWeekKey = computeWeekKeyForDate(new Date(dateObj.getTime() - 7 * 24 * 60 * 60 * 1000));
+            return { effectiveWeekKey, prevWeekKey };
+        }
+
+        function updateTransferWeekHint() {
+            const { effectiveWeekKey, prevWeekKey } = getTransferWeekKeys();
+            document.getElementById("transfer-modal-hint").innerText =
+                `${prevWeekKey}까지는 ${transferModalTeacherName || '현재'}T 출석부(기록 유지), ${effectiveWeekKey}부터는 새 담당 강사 출석부에 표시됩니다.`;
+        }
+
+        function renderTransferSlotList() {
+            const listContainer = document.getElementById("transfer-modal-slot-list");
+            listContainer.innerHTML = "";
+            const newTeacher = document.getElementById("transfer-modal-teacher").value;
+            const data = teacherDataStore[newTeacher];
+            if (!data) return;
+            const dayNameKo = { friday: '금요일', saturday: '토요일', sunday: '일요일' };
+            let hasAnySlot = false;
+            ['friday', 'saturday', 'sunday'].forEach(day => {
+                const daySlots = getSortedSlots(data.slots[day] || []);
+                if (daySlots.length === 0) return;
+                hasAnySlot = true;
+                const dayBlock = document.createElement("div");
+                const dayTitle = document.createElement("div");
+                dayTitle.className = "text-xs font-bold text-zinc-500 mb-1.5";
+                dayTitle.innerText = dayNameKo[day];
+                dayBlock.appendChild(dayTitle);
+                const slotWrap = document.createElement("div");
+                slotWrap.className = "space-y-1.5";
+                daySlots.forEach(slot => {
+                    const label = document.createElement("label");
+                    label.className = "flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-semibold border border-zinc-200 bg-white hover:border-primary cursor-pointer transition";
+                    const checkbox = document.createElement("input");
+                    checkbox.type = "checkbox";
+                    checkbox.value = slot.id;
+                    checkbox.className = "transfer-modal-slot-checkbox w-4 h-4 text-primary rounded border-zinc-300 focus:ring-primary";
+                    const textSpan = document.createElement("span");
+                    textSpan.className = "text-zinc-700";
+                    textSpan.innerText = slot.title;
+                    label.appendChild(checkbox);
+                    label.appendChild(textSpan);
+                    slotWrap.appendChild(label);
+                });
+                dayBlock.appendChild(slotWrap);
+                listContainer.appendChild(dayBlock);
+            });
+            if (!hasAnySlot) {
+                listContainer.innerHTML = '<div class="text-xs text-zinc-400 text-center py-6">선택한 강사에게 시간대 박스가 없습니다.</div>';
+            }
+        }
+
+        function saveTransferModal() {
+            const oldTeacher = transferModalTeacherName;
+            const studentKey = transferModalStudentKey;
+            const newTeacher = document.getElementById("transfer-modal-teacher").value;
+            if (!oldTeacher || !studentKey || !newTeacher) return;
+            const oldData = teacherDataStore[oldTeacher];
+            const newData = teacherDataStore[newTeacher];
+            const student = oldData && oldData.students.find(s => overrideKey(s) === studentKey && s.status !== 'deleted');
+            if (!student || !newData) return;
+
+            const chosenIds = Array.from(document.querySelectorAll('.transfer-modal-slot-checkbox:checked')).map(cb => cb.value);
+            if (chosenIds.length === 0) {
+                alert("새 강사의 시간표를 1개 이상 선택해주세요.");
+                return;
+            }
+            if (newData.students.some(s => overrideKey(s) === studentKey && s.status !== 'deleted')) {
+                alert(`${newTeacher}T에 이미 같은 이름/학교의 학생이 있어 옮길 수 없습니다.`);
+                return;
+            }
+            const { effectiveWeekKey, prevWeekKey } = getTransferWeekKeys();
+            if (student.firstWeekKey && student.firstWeekKey > prevWeekKey) {
+                alert(`${student.name} 학생은 ${student.firstWeekKey}부터 등록된 학생이라 ${effectiveWeekKey}부터 담당을 바꿀 수 없습니다. 더 늦은 날짜를 선택해주세요.`);
+                return;
+            }
+            if (!confirm(`${student.name}(${student.school || ''}) 학생의 담당을\n${oldTeacher}T → ${newTeacher}T 로 ${effectiveWeekKey}부터 변경하시겠습니까?\n\n${prevWeekKey}까지의 출석 기록은 ${oldTeacher}T 출석부에 그대로 남습니다.`)) return;
+
+            const transferredAt = getFormattedDate(new Date());
+            const newStudent = { name: student.name, school: student.school, phone: student.phone || '', parentPhone: student.parentPhone || '', slotIds: chosenIds, firstWeekKey: effectiveWeekKey, transferredFrom: oldTeacher, transferredAt };
+            if (student.registeredAt) newStudent.registeredAt = student.registeredAt;
+
+            const markOld = (target) => {
+                target.status = 'deleted';
+                target.deletedAt = transferredAt;
+                target.deletedWeekKey = prevWeekKey;
+                target.transferredTo = newTeacher;
+                target.transferredWeekKey = effectiveWeekKey;
+            };
+            markOld(student);
+            newData.students.push({ ...newStudent });
+
+            // 새 강사 쪽을 먼저 저장해서, 중간에 실패해도 학생이 어느 출석부에서도 안 보이는 상황은 생기지 않게 함
+            saveTeacherData(newTeacher, (freshData) => {
+                if (freshData.students.some(s => overrideKey(s) === studentKey && s.status !== 'deleted')) return;
+                freshData.students.push({ ...newStudent });
+            });
+            saveTeacherData(oldTeacher, (freshData) => {
+                const target = freshData.students.find(s => overrideKey(s) === studentKey && s.status !== 'deleted');
+                if (target) markOld(target);
+            });
+
+            closeTransferModal();
+            refreshAfterStudentListChange(oldTeacher);
         }
 
         // 삭제 처리: 삭제일은 항상 처리하는 "오늘" 날짜로 기록. isVisibleInWeek()는
