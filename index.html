@@ -303,7 +303,7 @@
 
         </main>
 
-        <div id="right-side-panel" class="fixed right-2 md:right-4 top-1/2 -translate-y-1/2 z-30 flex flex-col items-end gap-3">
+        <div id="right-side-panel" class="fixed right-2 md:right-4 top-[88px] z-30 flex flex-col items-end gap-3">
             <div id="integrated-teacher-filter" class="hidden flex-col items-stretch gap-2 bg-white border border-zinc-200 rounded-2xl p-3 shadow-lg">
             </div>
             <div id="day-quick-nav" class="flex flex-col gap-2">
@@ -315,14 +315,14 @@
     </div>
 
     <!-- 관리자 전용: 결석-전화주세요 학생 플로팅 팝업 (출석부와 같은 데이터를 직접 읽고 쓰므로 실시간 동기화됨) -->
-    <div id="call-popup" class="hidden fixed bottom-4 right-16 md:right-24 z-40 w-[380px] max-w-[calc(100vw-5rem)] bg-white border border-zinc-200 rounded-2xl shadow-2xl flex-col">
-        <div class="flex items-center justify-between px-3 py-2 bg-primary text-white rounded-t-2xl cursor-pointer select-none" onclick="toggleCallPopupMinimized()">
+    <div id="call-popup" class="hidden fixed bottom-4 right-2 md:right-4 z-40 w-[360px] max-w-[calc(100vw-1rem)] bg-white border border-zinc-200 rounded-2xl shadow-2xl flex-col">
+        <div id="call-popup-header" class="flex items-center justify-between px-3 py-2 bg-primary text-white rounded-t-2xl cursor-pointer select-none" onclick="toggleCallPopupMinimized()">
             <span class="font-bold text-sm">📞 전화주세요 <span id="call-popup-count" class="ml-1 bg-white/25 px-1.5 rounded-full text-xs">0</span></span>
             <span id="call-popup-toggle" class="text-lg leading-none px-1">−</span>
         </div>
         <div id="call-popup-body" class="flex flex-col">
             <div id="call-popup-filter" class="flex flex-wrap gap-1 p-2 border-b border-zinc-100"></div>
-            <div id="call-popup-list" class="overflow-y-auto p-2 space-y-1.5" style="max-height:55vh;"></div>
+            <div id="call-popup-list" class="overflow-y-auto p-2 space-y-1.5" style="max-height:max(120px, calc(100vh - 720px));"></div>
         </div>
     </div>
 
@@ -2428,6 +2428,16 @@
             document.getElementById("call-popup-count").innerText = allItems.length;
             document.getElementById("call-popup-body").classList.toggle("hidden", callPopupMinimized);
             document.getElementById("call-popup-toggle").innerText = callPopupMinimized ? "+" : "−";
+            // 최소화하면 동그란 알약 버튼 모양으로
+            popup.classList.toggle("w-[360px]", !callPopupMinimized);
+            popup.classList.toggle("w-auto", callPopupMinimized);
+            popup.classList.toggle("rounded-full", callPopupMinimized);
+            popup.classList.toggle("rounded-2xl", !callPopupMinimized);
+            const header = document.getElementById("call-popup-header");
+            header.classList.toggle("rounded-full", callPopupMinimized);
+            header.classList.toggle("rounded-t-2xl", !callPopupMinimized);
+            header.classList.toggle("px-4", callPopupMinimized);
+            document.getElementById("call-popup-toggle").classList.toggle("hidden", callPopupMinimized);
             if (callPopupMinimized) return;
 
             const filterHtml = INTEGRATED_TEACHER_GROUPS.map(g => {
