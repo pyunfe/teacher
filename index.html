@@ -314,6 +314,18 @@
         </div>
     </div>
 
+    <!-- 관리자 전용: 결석-전화주세요 학생 플로팅 팝업 (출석부와 같은 데이터를 직접 읽고 쓰므로 실시간 동기화됨) -->
+    <div id="call-popup" class="hidden fixed bottom-4 right-16 md:right-24 z-40 w-[380px] max-w-[calc(100vw-5rem)] bg-white border border-zinc-200 rounded-2xl shadow-2xl flex-col">
+        <div class="flex items-center justify-between px-3 py-2 bg-primary text-white rounded-t-2xl cursor-pointer select-none" onclick="toggleCallPopupMinimized()">
+            <span class="font-bold text-sm">📞 전화주세요 <span id="call-popup-count" class="ml-1 bg-white/25 px-1.5 rounded-full text-xs">0</span></span>
+            <span id="call-popup-toggle" class="text-lg leading-none px-1">−</span>
+        </div>
+        <div id="call-popup-body" class="flex flex-col">
+            <div id="call-popup-filter" class="flex flex-wrap gap-1 p-2 border-b border-zinc-100"></div>
+            <div id="call-popup-list" class="overflow-y-auto p-2 space-y-1.5" style="max-height:55vh;"></div>
+        </div>
+    </div>
+
     <div id="move-modal" class="hidden fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onclick="if(event.target===this) closeMoveModal()">
         <div class="bg-white rounded-2xl shadow-lg w-full max-w-md max-h-[80vh] flex flex-col">
             <div class="flex justify-between items-center p-4 border-b border-zinc-100">
@@ -1097,6 +1109,7 @@
 
         function renderCurrentActiveView() {
             if (document.getElementById("app-screen").classList.contains('hidden')) return;
+            refreshCallPopup();
 
             const attSec = document.getElementById("tab-attendance");
             const mngSec = document.getElementById("tab-management");
@@ -1176,6 +1189,7 @@
             document.getElementById("app-screen").classList.remove("hidden");
             updateSmsApiStatusBanner();
             startReservationScheduler();
+            refreshCallPopup(true);
         }
 
         async function handleLogin() {
@@ -1215,6 +1229,7 @@
             stopReservationScheduler();
             document.getElementById("app-screen").classList.add("hidden");
             document.getElementById("login-screen").classList.remove("hidden");
+            refreshCallPopup(true);
         }
 
         function getFormattedDate(dateObj) {
@@ -1243,6 +1258,7 @@
             } else {
                 renderTimetableAndSlots(currentTeacher);
             }
+            refreshCallPopup();
         }
 
         function updateSectionDateLabels() {
@@ -1996,6 +2012,8 @@
 
         function flushStudentMemo(studentName, slotId) {
             flushDebouncedSave(`attendanceRecord::${currentSelectedWeek}::${getRecordKey(studentName, slotId)}`);
+            // 이어서 누른 버튼 클릭이 씹히지 않도록 잠깐 뒤에 팝업 갱신
+            setTimeout(refreshCallPopup, 250);
         }
 
         // 시간대 박스 하단의 자유 메모(학생과 무관, 주차별로 강사/시간대 박스 단위로 저장)
@@ -2265,6 +2283,7 @@
             } else {
                 btnElement.className = "px-2 py-0.5 text-[11px] rounded font-bold bg-[#fee2e2] text-[#b91c1c] status-btn";
             }
+            refreshCallPopup();
         }
 
         // ===== 결석 버튼 -> 사유 선택 모달 =====
@@ -2323,6 +2342,7 @@
             if (absenceModalIsBulk) {
                 applyBulkAbsence(reason);
                 closeAbsenceReasonModal();
+                refreshCallPopup();
                 return;
             }
 
@@ -2340,7 +2360,146 @@
             updateStudentMemo(absenceModalStudentName, absenceModalSlotId, reason);
             flushStudentMemo(absenceModalStudentName, absenceModalSlotId);
 
+            const fromCallPopup = !!absenceModalBtnElement.closest('#call-popup');
             closeAbsenceReasonModal();
+            if (fromCallPopup) syncAfterCallPopupEdit();
+            else refreshCallPopup();
+        }
+
+        // ===== 전화주세요 플로팅 팝업 (관리자 전용) =====
+        // 출석부 블록과 동일한 attendanceRecords / 핸들러를 그대로 사용 -> 어느 쪽에서 고쳐도 같은 데이터가 바뀌고,
+        // 실시간 동기화로 다시 그려질 때(renderCurrentActiveView) 함께 갱신된다.
+        var callPopupFilterKey = "all";
+        var callPopupMinimized = false;
+        var callPopupLastHtml = null;
+        try { callPopupMinimized = localStorage.getItem("guksungCallPopupMin") === "1"; } catch (err) {}
+
+        function peekAttendanceRecord(studentName, slotId) {
+            const week = attendanceRecords[currentSelectedWeek];
+            if (!week) return null;
+            return week[getRecordKey(studentName, slotId)] || week[studentName] || null;
+        }
+
+        function collectCallPopupItems() {
+            const items = [];
+            INTEGRATED_TEACHER_GROUPS.forEach((group, gIdx) => {
+                if (group.key === "all") return;
+                if (callPopupFilterKey !== "all" && callPopupFilterKey !== group.key) return;
+                group.teachers.forEach(tName => {
+                    const tData = teacherDataStore[tName];
+                    if (!tData) return;
+                    ['friday', 'saturday', 'sunday'].forEach((day, dIdx) => {
+                        getSortedSlots(tData.slots[day] || []).forEach(slot => {
+                            tData.students.forEach(s => {
+                                if (!isVisibleInWeek(s, currentSelectedWeek)) return;
+                                if (!getEffectiveSlotIds(tName, s, currentSelectedWeek).includes(slot.id)) return;
+                                const rec = peekAttendanceRecord(s.name, slot.id);
+                                if (!rec || rec.status !== '결석' || String(rec.memo || '').trim() !== '전화주세요') return;
+                                items.push({ tName, s, slot, rec, order: [gIdx, group.teachers.indexOf(tName), dIdx, parseSlotTime(slot.title)] });
+                            });
+                        });
+                    });
+                });
+            });
+            items.sort((a, b) => {
+                for (let i = 0; i < a.order.length; i++) if (a.order[i] !== b.order[i]) return a.order[i] - b.order[i];
+                return a.s.name.localeCompare(b.s.name, 'ko');
+            });
+            return items;
+        }
+
+        function refreshCallPopup(force) {
+            const popup = document.getElementById("call-popup");
+            if (!popup) return;
+            const appHidden = document.getElementById("app-screen").classList.contains('hidden');
+            if (!isAdminLoggedIn || appHidden) {
+                popup.classList.add("hidden");
+                popup.classList.remove("flex");
+                return;
+            }
+            popup.classList.remove("hidden");
+            popup.classList.add("flex");
+
+            // 비고 입력 중에는 다시 그려서 포커스를 잃지 않도록 건너뜀(입력을 마치면 blur에서 갱신)
+            const active = document.activeElement;
+            if (!force && active && popup.contains(active) && active.tagName === 'INPUT') return;
+
+            const allItems = (() => { const k = callPopupFilterKey; callPopupFilterKey = "all"; const r = collectCallPopupItems(); callPopupFilterKey = k; return r; })();
+            document.getElementById("call-popup-count").innerText = allItems.length;
+            document.getElementById("call-popup-body").classList.toggle("hidden", callPopupMinimized);
+            document.getElementById("call-popup-toggle").innerText = callPopupMinimized ? "+" : "−";
+            if (callPopupMinimized) return;
+
+            const filterHtml = INTEGRATED_TEACHER_GROUPS.map(g => {
+                const cls = g.key === callPopupFilterKey ? "bg-primary text-white font-bold" : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 font-semibold";
+                return `<button onclick="setCallPopupFilter('${g.key}')" class="px-2.5 py-1 text-xs rounded-lg ${cls}">${g.label}</button>`;
+            }).join("");
+
+            const items = callPopupFilterKey === "all" ? allItems : collectCallPopupItems();
+            const listHtml = items.length === 0
+                ? '<div class="text-xs text-zinc-400 text-center py-6">전화주세요 학생이 없습니다.</div>'
+                : items.map(({ tName, s, slot, rec }) => {
+                    const isNewThisWeek = s.firstWeekKey === currentSelectedWeek && !s.transferredFrom;
+                    return `
+                        <div class="rounded-lg border border-zinc-200 bg-white shadow-sm p-2">
+                            <div class="text-[10px] text-zinc-400 truncate mb-1"><span class="text-primary font-bold">[${tName}T]</span> ${escapeHtml(slot.title)}</div>
+                            <div class="flex items-center">
+                                <div class="w-24 shrink-0 truncate mr-1.5">
+                                    <span class="font-bold text-xs text-zinc-900 ${isNewThisWeek ? 'bg-red-100' : ''}">${escapeHtml(s.name)}</span>
+                                    <span class="text-[10px] text-zinc-500">(${escapeHtml(s.school)})</span>
+                                </div>
+                                <div class="flex items-center space-x-1 shrink-0 mr-1.5">
+                                    <button onclick="callPopupSetPresent('${s.name}', '${slot.id}', this)" class="px-2 py-0.5 text-[11px] rounded bg-zinc-100 text-zinc-500 font-semibold status-btn">출석</button>
+                                    <button onclick="openAbsenceReasonModal('${s.name}', '${slot.id}', this)" class="px-2 py-0.5 text-[11px] rounded bg-[#fee2e2] text-[#b91c1c] font-bold status-btn">결석</button>
+                                </div>
+                                <div class="flex-1 min-w-0">
+                                    <input type="text" placeholder="비고" value="${escapeHtml(rec.memo)}"
+                                        oninput="updateStudentMemo('${s.name}', '${slot.id}', this.value)"
+                                        onblur="callPopupMemoBlur('${s.name}', '${slot.id}')"
+                                        class="w-full text-[11px] border border-zinc-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary text-zinc-700 bg-white">
+                                </div>
+                            </div>
+                        </div>`;
+                }).join("");
+
+            const filterEl = document.getElementById("call-popup-filter");
+            const listEl = document.getElementById("call-popup-list");
+            const html = filterHtml + "||" + listHtml;
+            if (!force && html === callPopupLastHtml) return;
+            callPopupLastHtml = html;
+            const prevScroll = listEl.scrollTop;
+            filterEl.innerHTML = filterHtml;
+            listEl.innerHTML = listHtml;
+            listEl.scrollTop = prevScroll;
+        }
+
+        function toggleCallPopupMinimized() {
+            callPopupMinimized = !callPopupMinimized;
+            try { localStorage.setItem("guksungCallPopupMin", callPopupMinimized ? "1" : "0"); } catch (err) {}
+            callPopupLastHtml = null;
+            refreshCallPopup(true);
+        }
+
+        function setCallPopupFilter(key) {
+            callPopupFilterKey = key;
+            refreshCallPopup(true);
+        }
+
+        // 팝업에서 수정한 내용을 출석부 화면에도 즉시 반영
+        function syncAfterCallPopupEdit() {
+            renderCurrentActiveView();
+            refreshCallPopup(true);
+        }
+
+        function callPopupSetPresent(studentName, slotId, btnElement) {
+            handleStatusClick(studentName, slotId, '출석', btnElement);
+            syncAfterCallPopupEdit();
+        }
+
+        function callPopupMemoBlur(studentName, slotId) {
+            flushStudentMemo(studentName, slotId);
+            // 곧바로 다시 그리면 이어서 누른 버튼 클릭이 씹힐 수 있어 잠깐 뒤에 반영
+            setTimeout(syncAfterCallPopupEdit, 250);
         }
 
         function renderManagementStudents(teacherName) {
