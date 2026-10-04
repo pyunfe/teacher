@@ -315,14 +315,14 @@
     </div>
 
     <!-- 관리자 전용: 결석-전화주세요 학생 플로팅 팝업 (출석부와 같은 데이터를 직접 읽고 쓰므로 실시간 동기화됨) -->
-    <div id="call-popup" class="hidden fixed bottom-4 right-2 md:right-4 z-40 w-[360px] max-w-[calc(100vw-1rem)] bg-white border border-zinc-200 rounded-2xl shadow-2xl flex-col">
+    <div id="call-popup" style="zoom:1.2;" class="hidden fixed bottom-4 right-2 md:right-4 z-40 w-[360px] max-w-[calc(100vw-1rem)] bg-white border border-zinc-200 rounded-2xl shadow-2xl flex-col">
         <div id="call-popup-header" class="flex items-center justify-between px-3 py-2 bg-primary text-white rounded-t-2xl cursor-pointer select-none" onclick="toggleCallPopupMinimized()">
             <span class="font-bold text-sm">📞 전화주세요 <span id="call-popup-count" class="ml-1 bg-white/25 px-1.5 rounded-full text-xs">0</span></span>
             <span id="call-popup-toggle" class="text-lg leading-none px-1">−</span>
         </div>
         <div id="call-popup-body" class="flex flex-col">
             <div id="call-popup-filter" class="flex flex-wrap gap-1 p-2 border-b border-zinc-100"></div>
-            <div id="call-popup-list" class="overflow-y-auto p-2 space-y-1.5" style="max-height:max(120px, calc(100vh - 720px));"></div>
+            <div id="call-popup-list" class="overflow-y-auto p-2 space-y-1.5" style="max-height:max(100px, calc((100vh - 720px) / 1.2));"></div>
         </div>
     </div>
 
