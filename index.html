@@ -219,7 +219,7 @@
                                 <span class="font-bold text-sm text-zinc-800">전체 원생 목록 (가나다순) <span id="management-total-count" class="text-zinc-400 font-normal"></span></span>
                                 <span class="text-xs text-zinc-400" id="selected-count">0건 선택됨</span>
                             </div>
-                            <div class="flex items-center space-x-1">
+                            <div id="management-mode-toggle" class="hidden flex items-center space-x-1">
                                 <button id="management-mode-active-btn" onclick="setManagementStatusMode('active')" class="text-[11px] px-3 py-1 rounded-lg font-semibold transition bg-zinc-800 text-white">재원생</button>
                                 <button id="management-mode-deleted-btn" onclick="setManagementStatusMode('deleted')" class="text-[11px] px-3 py-1 rounded-lg font-semibold transition bg-zinc-100 text-zinc-700 hover:bg-zinc-200">퇴원생</button>
                             </div>
@@ -2528,6 +2528,7 @@
         }
 
         function renderManagementStudentsImpl(teacherName) {
+            syncManagementModeUi();
             // 관리자가 통합출석부(전체 강사) 모드일 때는 전체 강사의 학생을 한번에 보여준다.
             if (isAdminLoggedIn && getCurrentActiveTeacher() === "통합출석부") {
                 renderManagementStudentsAll();
@@ -2609,22 +2610,31 @@
         // 재원생 보기: 삭제되지 않은 학생. 퇴원생 보기: 삭제된 학생 중 담당 강사 변경으로 옮겨진 기록(transferredTo)과,
         // 이미 같은 이름/학교로 복귀해 재원 중인 옛 기록은 제외 (출석 기록은 과거 주차에 한해 유지됨)
         function matchesManagementStatusFilter(s, teacherStudents) {
-            if (managementStatusMode !== 'deleted') return s.status !== 'deleted';
+            if (managementStatusMode !== 'deleted' || !isAdminLoggedIn) return s.status !== 'deleted';
             if (s.status !== 'deleted' || s.transferredTo) return false;
             const key = overrideKey(s);
             return !(teacherStudents || []).some(o => o.status !== 'deleted' && overrideKey(o) === key);
         }
 
-        function setManagementStatusMode(mode) {
-            managementStatusMode = mode;
+        // 퇴원생 보기는 관리자 전용: 관리자가 아니면 토글을 숨기고 재원생 보기로 되돌린다.
+        function syncManagementModeUi() {
+            if (!isAdminLoggedIn && managementStatusMode !== 'active') managementStatusMode = 'active';
+            const toggle = document.getElementById("management-mode-toggle");
+            if (toggle) toggle.classList.toggle("hidden", !isAdminLoggedIn);
             const activeBtn = document.getElementById("management-mode-active-btn");
             const deletedBtn = document.getElementById("management-mode-deleted-btn");
             const on = "text-[11px] px-3 py-1 rounded-lg font-semibold transition bg-zinc-800 text-white";
             const off = "text-[11px] px-3 py-1 rounded-lg font-semibold transition bg-zinc-100 text-zinc-700 hover:bg-zinc-200";
-            if (activeBtn) activeBtn.className = (mode === 'active') ? on : off;
-            if (deletedBtn) deletedBtn.className = (mode === 'deleted') ? on : off;
+            if (activeBtn) activeBtn.className = (managementStatusMode === 'active') ? on : off;
+            if (deletedBtn) deletedBtn.className = (managementStatusMode === 'deleted') ? on : off;
             const selectAllRow = document.getElementById("management-select-all-row");
-            if (selectAllRow) selectAllRow.classList.toggle("hidden", mode === 'deleted');
+            if (selectAllRow) selectAllRow.classList.toggle("hidden", managementStatusMode === 'deleted');
+        }
+
+        function setManagementStatusMode(mode) {
+            if (!isAdminLoggedIn) mode = 'active';
+            managementStatusMode = mode;
+            syncManagementModeUi();
             renderManagementStudents(getCurrentActiveTeacher());
         }
 
