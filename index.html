@@ -1497,7 +1497,7 @@
             document.getElementById("move-modal-student-name").innerText = `${studentName} (${teacherName}T)`;
             document.getElementById("move-modal-week-label").innerText = currentSelectedWeek;
 
-            const resolvedStudent = findStudentByAnchor(teacherName, data.students, studentName, moveModalAnchorSlotId);
+            const resolvedStudent = findStudentByAnchor(teacherName, getRosterWithPast(teacherName), studentName, moveModalAnchorSlotId);
             moveModalStudentIdentityKey = overrideKey(resolvedStudent);
             const isTemp = hasWeeklyOverride(teacherName, resolvedStudent, currentSelectedWeek);
 
@@ -1658,8 +1658,9 @@
             const teacherName = moveModalTeacherName;
 
             targetKeys.forEach(key => {
-                const student = findStudentByIdentityKey(data.students, key);
+                const student = findStudentByIdentityKey(getRosterWithPast(teacherName), key);
                 if (!student) return;
+                if (scope !== 'week' && student.__projected) return; // 이전 담당 기간의 기록은 기본 시간표를 바꿀 수 없음
 
                 if (scope === 'week') {
                     // 이번 주차에만 임시로 반영. 강사의 기본 시간표(student.slotIds)는 그대로 유지되어 다음 주차부터 자동 복원됨.
@@ -1715,7 +1716,7 @@
             if (!confirm("이번 주차의 임시 시간표 설정을 지우고 기본 시간표로 돌리시겠습니까?")) return;
 
             const data = teacherDataStore[moveModalTeacherName];
-            const student = data ? findStudentByIdentityKey(data.students, moveModalStudentIdentityKey) : null;
+            const student = data ? findStudentByIdentityKey(getRosterWithPast(moveModalTeacherName), moveModalStudentIdentityKey) : null;
             clearWeeklyOverride(moveModalTeacherName, student, currentSelectedWeek);
 
             const currentTeacher = getCurrentActiveTeacher();
@@ -1797,7 +1798,7 @@
                 // 동명이인 학생을 구분하기 위해, 선택한 그 칸(slotId)을 기준으로 실제 학생을 특정해서
                 // 식별 키(이름+학교)를 같이 저장해둔다. 나중에 이름만으로 다시 찾으면 엉뚱한 동명이인이 걸릴 수 있음.
                 const teacherData = teacherDataStore[teacherName];
-                const resolved = teacherData ? findStudentByAnchor(teacherName, teacherData.students, studentName, slotId) : null;
+                const resolved = teacherData ? findStudentByAnchor(teacherName, getRosterWithPast(teacherName), studentName, slotId) : null;
                 const identityKey = resolved ? overrideKey(resolved) : studentName;
                 moveSelectedStudents.push({ name: studentName, teacherName, slotId, identityKey });
                 nowSelected = true;
@@ -1960,8 +1961,46 @@
             return Array.isArray(student.leaves) && student.leaves.some(l => l.returnWeekKey === weekKey);
         }
 
+        // 담당 강사 변경 이력: 학생은 레코드 하나로 유지되고, 현재 담당 강사 목록(teacherDataStore[강사].students)에 들어있다.
+        //   teacherSince : 현재 담당 강사 출석부에 나타나기 시작하는 주차 (없으면 firstWeekKey 기준)
+        //   prevTeachers : 이전 담당 강사 이력 [{ teacher, slotIds, fromWeek(없으면 처음부터), toWeek, transferredFrom }]
+        //                  -> 그 강사의 출석부에는 이 기간(fromWeek~toWeek) 동안만 학생이 나타난다(getRosterWithPast).
+        // 이전 담당 기간의 학생을 "그 강사 기준 학생 객체"로 투영한다 (읽기 전용 표시용, 저장하면 안 됨).
+        function projectPastAssignment(student, entry) {
+            const p = { ...student, slotIds: (entry.slotIds || []).slice(), teacherSince: entry.fromWeek || undefined, transferredFrom: entry.transferredFrom || undefined, deletedWeekKey: entry.toWeek, __projected: true };
+            delete p.slotId;
+            delete p.status;
+            delete p.deletedAt;
+            delete p.prevTeachers;
+            delete p.transferredTo;
+            return p;
+        }
+
+        // teacherName 강사의 출석부 후보 학생: 현재 담당 학생 + 과거에 이 강사 담당이었던 학생(투영). 주차별 표시 여부는 isVisibleInWeek로 거른다.
+        function getRosterWithPast(teacherName) {
+            const own = teacherDataStore[teacherName];
+            const list = own && own.students ? own.students.slice() : [];
+            Object.keys(teacherDataStore).forEach(tn => {
+                const tData = teacherDataStore[tn];
+                if (!tData || !tData.students) return;
+                tData.students.forEach(s => {
+                    if (!Array.isArray(s.prevTeachers)) return;
+                    s.prevTeachers.forEach(e => {
+                        if (e.teacher === teacherName) list.push(projectPastAssignment(s, e));
+                    });
+                });
+            });
+            return list;
+        }
+
+        // 출석부 '신규'(빨간) 표시: 등록 주차에만. 옛 방식(담당 변경 때 새 레코드를 만든 학생)은 transferredFrom이 있으면 제외.
+        function isNewInWeek(student, weekKey) {
+            return student.firstWeekKey === weekKey && !(student.transferredFrom && !student.teacherSince);
+        }
+
         function isVisibleInWeek(student, weekKey) {
-            if (student.firstWeekKey && student.firstWeekKey > weekKey) return false;
+            const startWeekKey = student.teacherSince || student.firstWeekKey;
+            if (startWeekKey && startWeekKey > weekKey) return false;
             if (student.deletedWeekKey && weekKey > student.deletedWeekKey) return false;
             if (Array.isArray(student.leaves) && student.leaves.some(l => weekKey > l.deletedWeekKey && weekKey < l.returnWeekKey)) return false;
             if (Array.isArray(student.excludedWeeks) && student.excludedWeeks.includes(weekKey)) return false;
@@ -2123,19 +2162,19 @@
                     const { tName, daySlots, tData } = col;
 
                     daySlots.forEach((slot, slotIdx) => {
-                        const slotStudents = tData.students.filter(s => getEffectiveSlotIds(tName, s, currentSelectedWeek).includes(slot.id) && isVisibleInWeek(s, currentSelectedWeek));
+                        const slotStudents = getRosterWithPast(tName).filter(s => getEffectiveSlotIds(tName, s, currentSelectedWeek).includes(slot.id) && isVisibleInWeek(s, currentSelectedWeek));
                         let studentsHtml = "";
 
                         slotStudents.forEach(s => {
                             const rec = getStudentRecord(s.name, slot.id);
                             const isAtt = rec.status === '출석';
                             const isTemp = isSlotTempForStudent(tName, s, currentSelectedWeek, slot.id);
-                            const isNewThisWeek = s.firstWeekKey === currentSelectedWeek && !s.transferredFrom;
+                            const isNewThisWeek = isNewInWeek(s, currentSelectedWeek);
 
                             const attBtnClass = isAtt ? "bg-[#dcfce7] text-[#15803d] font-bold" : "bg-zinc-100 text-zinc-500 font-semibold";
                             const absBtnClass = !isAtt ? "bg-[#fee2e2] text-[#b91c1c] font-bold" : "bg-zinc-100 text-zinc-500 font-semibold";
                             const tempBadge = isTemp ? '<span class="text-[9px] bg-amber-100 text-amber-700 px-1 rounded ml-1 align-middle">임시</span>' : '';
-                        const transferBadge = ((s.transferredFrom && s.firstWeekKey === currentSelectedWeek) ? `<span class="text-[9px] bg-sky-100 text-sky-700 px-1 rounded ml-1 align-middle">${s.transferredFrom}T에서</span>` : '') + (isReturnWeek(s, currentSelectedWeek) ? '<span class="text-[9px] bg-emerald-100 text-emerald-700 px-1 rounded ml-1 align-middle">복귀</span>' : '');
+                        const transferBadge = ((s.transferredFrom && (s.teacherSince || s.firstWeekKey) === currentSelectedWeek) ? `<span class="text-[9px] bg-sky-100 text-sky-700 px-1 rounded ml-1 align-middle">${s.transferredFrom}T에서</span>` : '') + (isReturnWeek(s, currentSelectedWeek) ? '<span class="text-[9px] bg-emerald-100 text-emerald-700 px-1 rounded ml-1 align-middle">복귀</span>' : '');
                             const newNameClass = isNewThisWeek ? "bg-red-100" : "";
 
                             studentsHtml += `
@@ -2219,19 +2258,19 @@
 
                 let slotsHtml = `<div class="horizontal-scroll-container overflow-x-auto pb-3"><div class="flex space-x-4 items-start min-max-content">`;
                 daySlots.forEach(slot => {
-                    const slotStudents = data.students.filter(s => getEffectiveSlotIds(teacherName, s, currentSelectedWeek).includes(slot.id) && isVisibleInWeek(s, currentSelectedWeek));
+                    const slotStudents = getRosterWithPast(teacherName).filter(s => getEffectiveSlotIds(teacherName, s, currentSelectedWeek).includes(slot.id) && isVisibleInWeek(s, currentSelectedWeek));
                     let studentsHtml = "";
 
                     slotStudents.forEach(s => {
                         const rec = getStudentRecord(s.name, slot.id);
                         const isAtt = rec.status === '출석';
                         const isTemp = isSlotTempForStudent(teacherName, s, currentSelectedWeek, slot.id);
-                        const isNewThisWeek = s.firstWeekKey === currentSelectedWeek && !s.transferredFrom;
+                        const isNewThisWeek = isNewInWeek(s, currentSelectedWeek);
 
                         const attBtnClass = isAtt ? "bg-[#dcfce7] text-[#15803d] font-bold" : "bg-zinc-100 text-zinc-500 font-semibold";
                         const absBtnClass = !isAtt ? "bg-[#fee2e2] text-[#b91c1c] font-bold" : "bg-zinc-100 text-zinc-500 font-semibold";
                         const tempBadge = isTemp ? '<span class="text-[9px] bg-amber-100 text-amber-700 px-1 rounded ml-1 align-middle">임시</span>' : '';
-                        const transferBadge = ((s.transferredFrom && s.firstWeekKey === currentSelectedWeek) ? `<span class="text-[9px] bg-sky-100 text-sky-700 px-1 rounded ml-1 align-middle">${s.transferredFrom}T에서</span>` : '') + (isReturnWeek(s, currentSelectedWeek) ? '<span class="text-[9px] bg-emerald-100 text-emerald-700 px-1 rounded ml-1 align-middle">복귀</span>' : '');
+                        const transferBadge = ((s.transferredFrom && (s.teacherSince || s.firstWeekKey) === currentSelectedWeek) ? `<span class="text-[9px] bg-sky-100 text-sky-700 px-1 rounded ml-1 align-middle">${s.transferredFrom}T에서</span>` : '') + (isReturnWeek(s, currentSelectedWeek) ? '<span class="text-[9px] bg-emerald-100 text-emerald-700 px-1 rounded ml-1 align-middle">복귀</span>' : '');
                         const newNameClass = isNewThisWeek ? "bg-red-100" : "";
 
                         studentsHtml += `
@@ -2401,7 +2440,7 @@
                     if (!tData) return;
                     ['friday', 'saturday', 'sunday'].forEach((day, dIdx) => {
                         getSortedSlots(tData.slots[day] || []).forEach(slot => {
-                            tData.students.forEach(s => {
+                            getRosterWithPast(tName).forEach(s => {
                                 if (!isVisibleInWeek(s, currentSelectedWeek)) return;
                                 if (!getEffectiveSlotIds(tName, s, currentSelectedWeek).includes(slot.id)) return;
                                 const rec = peekAttendanceRecord(s.name, slot.id);
@@ -2460,7 +2499,7 @@
             const listHtml = items.length === 0
                 ? '<div class="text-xs text-zinc-400 text-center py-6">전화주세요 학생이 없습니다.</div>'
                 : items.map(({ tName, s, slot, rec }) => {
-                    const isNewThisWeek = s.firstWeekKey === currentSelectedWeek && !s.transferredFrom;
+                    const isNewThisWeek = isNewInWeek(s, currentSelectedWeek);
                     return `
                         <div class="rounded-lg border border-zinc-200 bg-white shadow-sm p-2">
                             <div class="text-[10px] text-zinc-400 truncate mb-1"><span class="text-primary font-bold">[${tName}T]</span> ${escapeHtml(slot.title)}</div>
@@ -3134,34 +3173,43 @@
                 alert(`${newTeacher}T에 이미 같은 이름/학교의 학생이 있어 옮길 수 없습니다.`);
                 return false;
             }
-            if (student.firstWeekKey && student.firstWeekKey > prevWeekKey) {
-                alert(`${student.name} 학생은 ${student.firstWeekKey}부터 등록된 학생이라 ${effectiveWeekKey}부터 담당을 바꿀 수 없습니다. 더 늦은 날짜를 선택해주세요.`);
+            const sinceWeekKey = student.teacherSince || student.firstWeekKey;
+            if (sinceWeekKey && sinceWeekKey > prevWeekKey) {
+                alert(`${student.name} 학생은 ${sinceWeekKey}부터 ${oldTeacher}T 담당이라 ${effectiveWeekKey}부터 담당을 바꿀 수 없습니다. 더 늦은 날짜를 선택해주세요.`);
                 return false;
             }
             if (!confirm(`${student.name}(${student.school || ''}) 학생의 담당을\n${oldTeacher}T → ${newTeacher}T 로 ${effectiveWeekKey}부터 변경하시겠습니까?\n\n${prevWeekKey}까지의 출석 기록은 ${oldTeacher}T 출석부에 그대로 남습니다.`)) return false;
 
+            // 학생 레코드는 하나만 유지: 이전 담당 기간을 prevTeachers 이력에 남기고, 레코드를 새 강사 목록으로 옮긴다.
             const transferredAt = getFormattedDate(new Date());
-            const newStudent = { name: edits.name, school: edits.school, phone: edits.phone, parentPhone: edits.parentPhone, slotIds: chosenIds, firstWeekKey: effectiveWeekKey, transferredFrom: oldTeacher, transferredAt };
-            if (student.registeredAt) newStudent.registeredAt = student.registeredAt;
-
-            const markOld = (target) => {
-                target.status = 'deleted';
-                target.deletedAt = transferredAt;
-                target.deletedWeekKey = prevWeekKey;
-                target.transferredTo = newTeacher;
-                target.transferredWeekKey = effectiveWeekKey;
+            const applyTransfer = (rec) => {
+                const entry = { teacher: oldTeacher, slotIds: getStudentSlotIds(rec), fromWeek: rec.teacherSince || null, toWeek: prevWeekKey };
+                if (rec.transferredFrom && rec.teacherSince) entry.transferredFrom = rec.transferredFrom;
+                rec.prevTeachers = (Array.isArray(rec.prevTeachers) ? rec.prevTeachers : []).concat([entry]);
+                rec.name = edits.name;
+                rec.school = edits.school;
+                rec.phone = edits.phone;
+                rec.parentPhone = edits.parentPhone;
+                rec.slotIds = chosenIds.slice();
+                delete rec.slotId;
+                rec.teacherSince = effectiveWeekKey;
+                rec.transferredFrom = oldTeacher;
+                rec.transferredAt = transferredAt;
+                return rec;
             };
-            markOld(student);
-            newData.students.push({ ...newStudent });
+            const moved = applyTransfer(student);
+            oldData.students.splice(studentModalEditIndex, 1);
+            newData.students.push(moved);
 
             // 새 강사 쪽을 먼저 저장해서, 중간에 실패해도 학생이 어느 출석부에서도 안 보이는 상황은 생기지 않게 함
+            const movedSnapshot = JSON.parse(JSON.stringify(moved));
             saveTeacherData(newTeacher, (freshData) => {
                 if (freshData.students.some(s => overrideKey(s) === newKey && s.status !== 'deleted')) return;
-                freshData.students.push({ ...newStudent });
+                freshData.students.push(JSON.parse(JSON.stringify(movedSnapshot)));
             });
             saveTeacherData(oldTeacher, (freshData) => {
-                const target = freshData.students.find(s => overrideKey(s) === studentKey && s.status !== 'deleted');
-                if (target) markOld(target);
+                const idx = freshData.students.findIndex(s => overrideKey(s) === studentKey && s.status !== 'deleted');
+                if (idx !== -1) freshData.students.splice(idx, 1);
             });
             return true;
         }
@@ -3718,7 +3766,7 @@
                 if (end <= rawRange.start) end = rawRange.start + 1;
                 range = { start: rawRange.start, end };
             }
-            const count = tData ? tData.students.filter(s => getStudentSlotIds(s).includes(slot.id) && isVisibleInWeek(s, currentSelectedWeek)).length : 0;
+            const count = tData ? getRosterWithPast(teacherName).filter(s => getStudentSlotIds(s).includes(slot.id) && isVisibleInWeek(s, currentSelectedWeek)).length : 0;
             return { teacherName, slot, range, count, key: `${teacherName}::${slot.id}` };
         }
 
