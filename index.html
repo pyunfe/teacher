@@ -219,7 +219,11 @@
                                 <span class="font-bold text-sm text-zinc-800">전체 원생 목록 (가나다순) <span id="management-total-count" class="text-zinc-400 font-normal"></span></span>
                                 <span class="text-xs text-zinc-400" id="selected-count">0건 선택됨</span>
                             </div>
-                            <div class="flex items-center space-x-1.5">
+                            <div class="flex items-center space-x-1">
+                                <button id="management-mode-active-btn" onclick="setManagementStatusMode('active')" class="text-[11px] px-3 py-1 rounded-lg font-semibold transition bg-zinc-800 text-white">재원생</button>
+                                <button id="management-mode-deleted-btn" onclick="setManagementStatusMode('deleted')" class="text-[11px] px-3 py-1 rounded-lg font-semibold transition bg-zinc-100 text-zinc-700 hover:bg-zinc-200">퇴원생</button>
+                            </div>
+                            <div id="management-select-all-row" class="flex items-center space-x-1.5">
                                 <span class="text-[11px] text-zinc-500 shrink-0">전체 선택:</span>
                                 <button onclick="selectAllRecipients('student')" class="text-[11px] bg-zinc-100 hover:bg-zinc-200 text-zinc-700 px-2.5 py-1 rounded-lg font-semibold transition">학생</button>
                                 <button onclick="selectAllRecipients('parent')" class="text-[11px] bg-zinc-100 hover:bg-zinc-200 text-zinc-700 px-2.5 py-1 rounded-lg font-semibold transition">학부모</button>
@@ -423,7 +427,7 @@
                 </div>
                 <div id="student-modal-withdraw-section" class="hidden pt-3 border-t border-zinc-100 space-y-2">
                     <div class="flex items-center space-x-2">
-                        <button type="button" id="student-modal-delete-btn" onclick="handleDeleteFromModal()" class="text-xs bg-rose-50 hover:bg-rose-100 text-rose-600 px-3 py-1.5 rounded-lg font-semibold transition">삭제</button>
+                        <button type="button" id="student-modal-delete-btn" onclick="handleDeleteFromModal()" class="text-xs bg-rose-50 hover:bg-rose-100 text-rose-600 px-3 py-1.5 rounded-lg font-semibold transition">퇴원</button>
                         <button type="button" id="student-modal-remove-forever-btn" onclick="handleRemoveForeverFromModal()" class="text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-500 px-3 py-1.5 rounded-lg font-semibold transition">제거</button>
                     </div>
                 </div>
@@ -546,6 +550,7 @@
         // 여기에 없는 학생은 항상 teacherDataStore의 기본(slotIds) 설정을 따른다 -> 다음 주차부터는 자동으로 기본값 복원.
         var weeklyOverrides = {};
         var attendanceSearchQuery = "";
+        var managementStatusMode = "active"; // 'active'(재원생) | 'deleted'(퇴원생)
         var managementSearchQuery = "";
         var managementSchoolFilter = "";
         var managementTeacherFilter = "";
@@ -1950,9 +1955,15 @@
         // 학생이 특정 주차 출석부에 표시되어야 하는지 여부.
         // firstWeekKey가 없는 학생(기존 데이터)은 항상 표시(기존 동작 유지). 있으면 그 주차부터만 표시.
         // 삭제(deletedWeekKey)된 학생은 삭제 처리한 주차까지는 보이고, 그 다음 주차부터는 사라짐 (그 전 기록은 유지).
+        // 퇴원 후 복귀한 학생이 복귀한 바로 그 주차인지 (출석부 '복귀' 배지용)
+        function isReturnWeek(student, weekKey) {
+            return Array.isArray(student.leaves) && student.leaves.some(l => l.returnWeekKey === weekKey);
+        }
+
         function isVisibleInWeek(student, weekKey) {
             if (student.firstWeekKey && student.firstWeekKey > weekKey) return false;
             if (student.deletedWeekKey && weekKey > student.deletedWeekKey) return false;
+            if (Array.isArray(student.leaves) && student.leaves.some(l => weekKey > l.deletedWeekKey && weekKey < l.returnWeekKey)) return false;
             if (Array.isArray(student.excludedWeeks) && student.excludedWeeks.includes(weekKey)) return false;
             return true;
         }
@@ -2124,7 +2135,7 @@
                             const attBtnClass = isAtt ? "bg-[#dcfce7] text-[#15803d] font-bold" : "bg-zinc-100 text-zinc-500 font-semibold";
                             const absBtnClass = !isAtt ? "bg-[#fee2e2] text-[#b91c1c] font-bold" : "bg-zinc-100 text-zinc-500 font-semibold";
                             const tempBadge = isTemp ? '<span class="text-[9px] bg-amber-100 text-amber-700 px-1 rounded ml-1 align-middle">임시</span>' : '';
-                        const transferBadge = (s.transferredFrom && s.firstWeekKey === currentSelectedWeek) ? `<span class="text-[9px] bg-sky-100 text-sky-700 px-1 rounded ml-1 align-middle">${s.transferredFrom}T에서</span>` : '';
+                        const transferBadge = ((s.transferredFrom && s.firstWeekKey === currentSelectedWeek) ? `<span class="text-[9px] bg-sky-100 text-sky-700 px-1 rounded ml-1 align-middle">${s.transferredFrom}T에서</span>` : '') + (isReturnWeek(s, currentSelectedWeek) ? '<span class="text-[9px] bg-emerald-100 text-emerald-700 px-1 rounded ml-1 align-middle">복귀</span>' : '');
                             const newNameClass = isNewThisWeek ? "bg-red-100" : "";
 
                             studentsHtml += `
@@ -2220,7 +2231,7 @@
                         const attBtnClass = isAtt ? "bg-[#dcfce7] text-[#15803d] font-bold" : "bg-zinc-100 text-zinc-500 font-semibold";
                         const absBtnClass = !isAtt ? "bg-[#fee2e2] text-[#b91c1c] font-bold" : "bg-zinc-100 text-zinc-500 font-semibold";
                         const tempBadge = isTemp ? '<span class="text-[9px] bg-amber-100 text-amber-700 px-1 rounded ml-1 align-middle">임시</span>' : '';
-                        const transferBadge = (s.transferredFrom && s.firstWeekKey === currentSelectedWeek) ? `<span class="text-[9px] bg-sky-100 text-sky-700 px-1 rounded ml-1 align-middle">${s.transferredFrom}T에서</span>` : '';
+                        const transferBadge = ((s.transferredFrom && s.firstWeekKey === currentSelectedWeek) ? `<span class="text-[9px] bg-sky-100 text-sky-700 px-1 rounded ml-1 align-middle">${s.transferredFrom}T에서</span>` : '') + (isReturnWeek(s, currentSelectedWeek) ? '<span class="text-[9px] bg-emerald-100 text-emerald-700 px-1 rounded ml-1 align-middle">복귀</span>' : '');
                         const newNameClass = isNewThisWeek ? "bg-red-100" : "";
 
                         studentsHtml += `
@@ -2527,7 +2538,7 @@
             listContainer.innerHTML = "";
             const data = teacherDataStore[teacherName];
             const allStudents = data ? data.students : [];
-            const students = allStudents.filter(s => matchesManagementStatusFilter(s));
+            const students = allStudents.filter(s => matchesManagementStatusFilter(s, allStudents));
 
             // 특정 강사 보기에서는 강사별 필터가 필요 없으므로 숨기고 초기화
             const teacherFilterEl = document.getElementById("management-teacher-filter");
@@ -2545,7 +2556,9 @@
 
             students.forEach((s) => {
                 const idx = allStudents.indexOf(s);
-                const item = buildManagementStudentItem(s, teacherName, idx, false);
+                const item = managementStatusMode === 'deleted'
+                    ? buildDeletedStudentItem(s, teacherName, idx, false)
+                    : buildManagementStudentItem(s, teacherName, idx, false);
                 listContainer.appendChild(item);
             });
             updateSelectedCount();
@@ -2562,7 +2575,7 @@
                 const data = teacherDataStore[tName];
                 if (!data || !data.students) return;
                 data.students.forEach((s, idx) => {
-                    if (!matchesManagementStatusFilter(s)) return;
+                    if (!matchesManagementStatusFilter(s, data.students)) return;
                     combined.push({ student: s, teacherName: tName, idx });
                 });
             });
@@ -2584,16 +2597,116 @@
             }
 
             combined.forEach(({ student, teacherName, idx }) => {
-                const item = buildManagementStudentItem(student, teacherName, idx, true);
+                const item = managementStatusMode === 'deleted'
+                    ? buildDeletedStudentItem(student, teacherName, idx, true)
+                    : buildManagementStudentItem(student, teacherName, idx, true);
                 listContainer.appendChild(item);
             });
             updateSelectedCount();
             applyManagementSearchFilter();
         }
 
-        // 삭제된 학생은 원생 관리 목록에서 제외 (출석 기록은 과거 주차에 한해 유지됨)
-        function matchesManagementStatusFilter(s) {
-            return s.status !== 'deleted';
+        // 재원생 보기: 삭제되지 않은 학생. 퇴원생 보기: 삭제된 학생 중 담당 강사 변경으로 옮겨진 기록(transferredTo)과,
+        // 이미 같은 이름/학교로 복귀해 재원 중인 옛 기록은 제외 (출석 기록은 과거 주차에 한해 유지됨)
+        function matchesManagementStatusFilter(s, teacherStudents) {
+            if (managementStatusMode !== 'deleted') return s.status !== 'deleted';
+            if (s.status !== 'deleted' || s.transferredTo) return false;
+            const key = overrideKey(s);
+            return !(teacherStudents || []).some(o => o.status !== 'deleted' && overrideKey(o) === key);
+        }
+
+        function setManagementStatusMode(mode) {
+            managementStatusMode = mode;
+            const activeBtn = document.getElementById("management-mode-active-btn");
+            const deletedBtn = document.getElementById("management-mode-deleted-btn");
+            const on = "text-[11px] px-3 py-1 rounded-lg font-semibold transition bg-zinc-800 text-white";
+            const off = "text-[11px] px-3 py-1 rounded-lg font-semibold transition bg-zinc-100 text-zinc-700 hover:bg-zinc-200";
+            if (activeBtn) activeBtn.className = (mode === 'active') ? on : off;
+            if (deletedBtn) deletedBtn.className = (mode === 'deleted') ? on : off;
+            const selectAllRow = document.getElementById("management-select-all-row");
+            if (selectAllRow) selectAllRow.classList.toggle("hidden", mode === 'deleted');
+            renderManagementStudents(getCurrentActiveTeacher());
+        }
+
+        // 퇴원생 목록의 개별 행: 문자 발송 체크박스 없이 퇴원일과 '복귀' 버튼만 보여준다.
+        function buildDeletedStudentItem(s, teacherName, idx, showTeacherBadge) {
+            const item = document.createElement("div");
+            item.className = "flex items-center justify-between p-2.5 rounded-xl border border-zinc-200 bg-zinc-50/50 hover:bg-white transition";
+            item.setAttribute('data-student-name', s.name);
+            item.setAttribute('data-student-school', s.school || '');
+            item.setAttribute('data-teacher-name', teacherName || '');
+            const teacherBadge = showTeacherBadge
+                ? `<span class="text-[10px] text-primary font-semibold ml-1">[${teacherName}T]</span>`
+                : '';
+            item.innerHTML = `
+                <div class="truncate">
+                    <span class="font-bold text-xs text-zinc-900">${s.name}</span>
+                    <span class="text-[11px] text-zinc-500">(${s.school})</span>
+                    ${teacherBadge}
+                    <span class="text-[10px] text-rose-400 ml-1">퇴원 ${s.deletedAt || ''}</span>
+                    <br>
+                    <span class="text-[11px] text-zinc-500">학생:${s.phone || '-'}</span>
+                    <span class="text-[11px] text-zinc-500 ml-1">학부모:${s.parentPhone || '-'}</span>
+                </div>
+                <div class="shrink-0">
+                    ${isAdminLoggedIn ? `<button onclick="returnDeletedStudent('${teacherName}', ${idx})" class="text-[11px] bg-emerald-50 hover:bg-emerald-100 text-emerald-700 px-2.5 py-1 rounded font-semibold transition">복귀</button>` : ''}
+                </div>
+            `;
+            return item;
+        }
+
+        // 복귀: 학생당 레코드 하나를 유지한다. 퇴원 정보(deletedAt/deletedWeekKey)를 leaves(휴원 구간) 이력으로 옮기고
+        // status를 되살린다. 구간(퇴원 주차 초과 ~ 복귀 주차 미만)의 출석부에는 나타나지 않고(isVisibleInWeek), 과거 출석 기록은 유지된다.
+        function applyReturnToRecord(target, returnWeekKey, slotIds, todayStr) {
+            if (!Array.isArray(target.leaves)) target.leaves = [];
+            target.leaves.push({ deletedAt: target.deletedAt || '', deletedWeekKey: target.deletedWeekKey, returnWeekKey });
+            delete target.status;
+            delete target.deletedAt;
+            delete target.deletedWeekKey;
+            target.slotIds = slotIds;
+            delete target.slotId;
+            target.returnedAt = todayStr;
+        }
+
+        function returnDeletedStudent(teacherName, index) {
+            if (!isAdminLoggedIn) return;
+            const data = teacherDataStore[teacherName];
+            if (!data) return;
+            const student = data.students[index];
+            if (!student || student.status !== 'deleted') return;
+
+            const studentKey = overrideKey(student);
+            const deletedWeekKey = student.deletedWeekKey;
+            if (data.students.some(s => overrideKey(s) === studentKey && s.status !== 'deleted')) {
+                alert(`${student.name}(${student.school || ''}) 학생과 같은 이름/학교의 재원생이 이미 ${teacherName}T에 있어 복귀시킬 수 없습니다.`);
+                return;
+            }
+
+            const existingSlotIds = new Set(['friday', 'saturday', 'sunday'].flatMap(day => (data.slots[day] || []).map(sl => sl.id)));
+            const slotIds = getStudentSlotIds(student).filter(id => existingSlotIds.has(id));
+            if (slotIds.length === 0) {
+                alert(`${student.name} 학생이 쓰던 시간대 박스가 모두 없어져서 복귀시킬 수 없습니다. 원생 신규 등록으로 다시 등록해주세요.`);
+                return;
+            }
+
+            const today = new Date();
+            const todayStr = getFormattedDate(today);
+            const returnWeekKey = computeWeekKeyForDate(today);
+            if (deletedWeekKey && deletedWeekKey >= returnWeekKey) {
+                alert(`${student.name} 학생의 퇴원 처리 주차(${deletedWeekKey})가 이번 주차와 겹쳐 복귀시킬 수 없습니다.`);
+                return;
+            }
+            if (!confirm(`${student.name}(${student.school || ''}) 학생을 ${returnWeekKey}부터 복귀시키시겠습니까?
+
+퇴원 전 출석 기록은 그대로 남고, 퇴원 이후 ~ 이번 주차 전까지의 출석부에는 나타나지 않습니다.`)) return;
+
+            applyReturnToRecord(student, returnWeekKey, slotIds, todayStr);
+            saveTeacherData(teacherName, (freshData) => {
+                const target = freshData.students.find(s => overrideKey(s) === studentKey && s.status === 'deleted' && !s.transferredTo && s.deletedWeekKey === deletedWeekKey);
+                if (!target) return;
+                applyReturnToRecord(target, returnWeekKey, slotIds, todayStr);
+            });
+            refreshAfterStudentListChange(teacherName);
         }
 
         // 원생 관리 목록의 개별 학생 행(row)을 생성. showTeacherBadge=true면 통합보기에서 담당 강사를 함께 표시.
@@ -2636,7 +2749,7 @@
                         <span>학부모</span>
                     </label>
                     ${isAdminLoggedIn ? `<button onclick="openEditStudentModal('${teacherName}', ${idx})" class="text-[11px] bg-zinc-200 hover:bg-zinc-300 text-zinc-700 px-2.5 py-1 rounded font-semibold transition">수정</button>` : ''}
-                    ${isAdminLoggedIn ? `<button onclick="handleDeleteStudent('${teacherName}', ${idx})" class="text-[11px] bg-rose-50 hover:bg-rose-100 text-rose-600 px-2.5 py-1 rounded font-semibold transition">삭제</button>` : ''}
+                    ${isAdminLoggedIn ? `<button onclick="handleDeleteStudent('${teacherName}', ${idx})" class="text-[11px] bg-rose-50 hover:bg-rose-100 text-rose-600 px-2.5 py-1 rounded font-semibold transition">퇴원</button>` : ''}
                 </div>
             `;
             return item;
@@ -2773,7 +2886,7 @@
             renderStudentModalSlotList();
             updateStudentModalTransferUi();
 
-            // 삭제 버튼 영역: 수정 모드에서만 노출.
+            // 퇴원/제거 버튼 영역: 수정 모드에서만 노출.
             const withdrawSection = document.getElementById("student-modal-withdraw-section");
             if (mode === 'edit') {
                 withdrawSection.classList.remove("hidden");
@@ -2845,7 +2958,9 @@
                 delete student.slotId;
 
                 applyPatch = (freshData) => {
-                    const target = freshData.students.find(s => s.name === originalName);
+                    // 퇴원 후 복귀한 학생은 같은 이름의 옛 퇴원 레코드가 남아있으므로 재원 중인 레코드를 우선 찾는다
+                    const target = freshData.students.find(s => s.name === originalName && s.status !== 'deleted')
+                        || freshData.students.find(s => s.name === originalName);
                     if (!target) return;
                     target.name = name;
                     target.school = school;
@@ -3113,7 +3228,7 @@
             }
         }
 
-        // 완전 제거: '삭제'와 달리 출석 기록까지 포함해서 Supabase에서 흔적도 없이 지운다. 되돌릴 수 없음.
+        // 완전 제거: '퇴원'과 달리 출석 기록까지 포함해서 Supabase에서 흔적도 없이 지운다. 되돌릴 수 없음.
         // (자동등록 스크립트 테스트 중 잘못 등록된 학생을 지우고 다시 시도할 때 등 사용)
         function removeStudentPermanently(teacherName, index) {
             const data = teacherDataStore[teacherName];
@@ -3142,15 +3257,15 @@
             const student = data.students[index];
             if (!student) return;
 
-            if (!confirm(`${student.name} 학생을 완전히 제거하시겠습니까?\n\n'삭제'와 달리 출석 기록까지 전부 사라지며 되돌릴 수 없습니다.`)) return;
+            if (!confirm(`${student.name} 학생을 완전히 제거하시겠습니까?\n\n'퇴원'과 달리 출석 기록까지 전부 사라지며 되돌릴 수 없습니다.`)) return;
 
             removeStudentPermanently(teacherName, index);
             refreshAfterStudentListChange(teacherName);
             closeStudentModal();
         }
 
-        // 원생 관리 목록의 '삭제' 버튼: 원생 목록에서는 즉시 사라지고,
-        // 이번 주차 출석부부터 이름이 빠진다 (그 전 출석 기록은 남아있음). 되돌릴 수 없음.
+        // 원생 관리 목록의 '퇴원' 버튼: 재원생 목록에서는 사라지고(퇴원생 목록에서 복귀 가능),
+        // 이번 주차 출석부부터 이름이 빠진다 (그 전 출석 기록은 남아있음).
         function handleDeleteStudent(teacherName, index) {
             if (!isAdminLoggedIn) return;
             const data = teacherDataStore[teacherName];
@@ -3158,13 +3273,13 @@
             const student = data.students[index];
             if (!student) return;
 
-            if (!confirm(`${student.name} 학생을 삭제하시겠습니까?\n\n원생 목록에서 즉시 사라지고, 이번 주차 출석부부터 이름이 빠집니다.\n(그 전 출석 기록은 그대로 남아있습니다.)`)) return;
+            if (!confirm(`${student.name} 학생을 퇴원 처리하시겠습니까?\n\n재원생 목록에서 사라지고(퇴원생 목록에서 복귀 가능), 이번 주차 출석부부터 이름이 빠집니다.\n(그 전 출석 기록은 그대로 남아있습니다.)`)) return;
 
             softDeleteStudent(teacherName, index);
             refreshAfterStudentListChange(teacherName);
         }
 
-        // 학생 정보 수정 모달 안의 '삭제' 버튼
+        // 학생 정보 수정 모달 안의 '퇴원' 버튼
         function handleDeleteFromModal() {
             const teacherName = studentModalTeacherName;
             const index = studentModalEditIndex;
@@ -3173,7 +3288,7 @@
             const student = data.students[index];
             if (!student) return;
 
-            if (!confirm(`${student.name} 학생을 삭제하시겠습니까?\n\n원생 목록에서 즉시 사라지고, 이번 주차 출석부부터 이름이 빠집니다.\n(그 전 출석 기록은 그대로 남아있습니다.)`)) return;
+            if (!confirm(`${student.name} 학생을 퇴원 처리하시겠습니까?\n\n재원생 목록에서 사라지고(퇴원생 목록에서 복귀 가능), 이번 주차 출석부부터 이름이 빠집니다.\n(그 전 출석 기록은 그대로 남아있습니다.)`)) return;
 
             softDeleteStudent(teacherName, index);
             refreshAfterStudentListChange(teacherName);
