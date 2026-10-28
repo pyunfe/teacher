@@ -973,7 +973,9 @@
 
             let defaultSelectedWeekKey = "";
 
-            for (let i = 0; i <= diffWeeks; i++) {
+            // 다음 주차 출석부는 관리자 모드에서만 선택할 수 있다 (강사 모드는 이번 주차까지만).
+            const lastWeekIdx = diffWeeks + (isAdminLoggedIn ? 1 : 0);
+            for (let i = 0; i <= lastWeekIdx; i++) {
                 let satDateObj = new Date(baseStartDate);
                 satDateObj.setDate(baseStartDate.getDate() + (i * 7));
 
@@ -1160,6 +1162,7 @@
         function applyLoggedInUI(isAdmin, identity) {
             isAdminLoggedIn = isAdmin;
             currentLoginIdentity = identity;
+            initWeeks(); // 관리자 여부에 따라 다음 주차 옵션 포함/제외
             const adminResBtn = document.getElementById("tab-admin-reservations-btn");
 
             // 원생 신규 등록은 관리자만 가능 (강사 모드에서는 실수로 중복/오등록되는 것을 막기 위해 숨김)
