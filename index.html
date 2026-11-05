@@ -120,8 +120,9 @@
             </div>
 
             <div class="flex items-center gap-x-6 gap-y-2 md:flex-wrap md:ml-auto">
-                <nav class="grid grid-cols-4 gap-1.5 w-full md:flex md:w-auto md:flex-wrap md:gap-2">
+                <nav class="grid grid-cols-5 gap-1.5 w-full md:flex md:w-auto md:flex-wrap md:gap-2">
                     <button onclick="switchTab('attendance')" id="tab-attendance-btn" class="px-1.5 md:px-4 py-1.5 md:py-2 rounded-lg text-[11px] md:text-base font-semibold bg-primary text-white transition truncate">출석부</button>
+                    <button onclick="switchTab('special')" id="tab-special-btn" class="px-1.5 md:px-4 py-1.5 md:py-2 rounded-lg text-[11px] md:text-base font-semibold text-zinc-600 hover:bg-zinc-100 transition truncate">특강 출석부</button>
                     <button onclick="switchTab('classroom')" id="tab-classroom-btn" class="px-1.5 md:px-4 py-1.5 md:py-2 rounded-lg text-[11px] md:text-base font-semibold text-zinc-600 hover:bg-zinc-100 transition truncate"><span class="hidden md:inline">강의실 배정표</span><span class="md:hidden">배정표</span></button>
                     <button onclick="switchTab('management')" id="tab-management-btn" class="px-1.5 md:px-4 py-1.5 md:py-2 rounded-lg text-[11px] md:text-base font-semibold text-zinc-600 hover:bg-zinc-100 transition truncate">원생 관리</button>
                     <button onclick="switchTab('admin-reservations')" id="tab-admin-reservations-btn" class="px-1.5 md:px-4 py-1.5 md:py-2 rounded-lg text-[11px] md:text-base font-semibold text-zinc-600 hover:bg-zinc-100 transition truncate"><span class="hidden md:inline">발송 예약 관리</span><span class="md:hidden">예약 관리</span></button>
@@ -293,6 +294,19 @@
                         <div id="classroom-pool-list" class="space-y-2 max-h-[720px] overflow-y-auto pr-1" ondragover="handleClassroomPoolDragOver(event)" ondrop="handleClassroomPoolDrop(event)" onclick="handleClassroomPoolTap(event)"></div>
                     </div>
                 </div>
+            </section>
+
+            <section id="tab-special" class="hidden space-y-6">
+                <div class="flex flex-wrap gap-3 justify-between items-center bg-white p-4 rounded-2xl shadow-sm border border-zinc-200">
+                    <div>
+                        <h2 class="text-xl font-bold text-zinc-800" id="special-title">특강 출석부</h2>
+                        <p class="text-xs text-zinc-500 mt-1">홈페이지 관리자에서 담당 강사로 등록된 특강이 자동으로 나타납니다. 신청한 학생이 회차별로 표시됩니다.</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button onclick="spReload()" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-100 text-zinc-700 hover:bg-zinc-200 transition">새로고침</button>
+                    </div>
+                </div>
+                <div id="special-body" class="space-y-4"></div>
             </section>
 
             <section id="tab-admin-reservations" class="hidden space-y-6">
@@ -1883,6 +1897,7 @@
                 renderIntegratedTimetable();
                 // 원생 관리 탭이 특정 강사 보기로 고정된 채 남아있지 않도록 함께 갱신
                 renderManagementStudents(targetValue);
+                spRerenderIfOpen();
                 return;
             }
 
@@ -1905,6 +1920,7 @@
 
             sortStudentsAlphabetically(targetValue);
             renderFullApp(targetValue);
+            spRerenderIfOpen();
         }
 
         function sortStudentsAlphabetically(teacherName) {
@@ -4080,6 +4096,8 @@
             const mngBtn = document.getElementById("tab-management-btn");
             const classroomBtn = document.getElementById("tab-classroom-btn");
             const adminResBtn = document.getElementById("tab-admin-reservations-btn");
+            const specialBtn = document.getElementById("tab-special-btn");
+            const specialSec = document.getElementById("tab-special");
 
             const attSec = document.getElementById("tab-attendance");
             const mngSec = document.getElementById("tab-management");
@@ -4100,6 +4118,8 @@
             setActive(mngBtn, false);
             setActive(classroomBtn, false);
             setActive(adminResBtn, false);
+            setActive(specialBtn, false);
+            if (specialSec) specialSec.classList.add("hidden");
 
             attSec.classList.add("hidden");
             mngSec.classList.add("hidden");
@@ -4127,6 +4147,10 @@
                 setActive(adminResBtn, true);
                 adminResSec.classList.remove("hidden");
                 renderAdminReservations();
+            } else if (tabName === 'special') {
+                setActive(specialBtn, true);
+                if (specialSec) specialSec.classList.remove("hidden");
+                spReload();
             }
         }
 
@@ -4258,6 +4282,157 @@
             renderFullApp(teacherName);
             saveTeacherData(teacherName, (freshData) => applySlotDeletion(freshData, dayKey, slotId));
             closeSlotModal();
+        }
+
+        // =====================================================================
+        // 특강 출석부 (홈페이지 특강 신청 시스템과 연동)
+        //  - 홈페이지 관리자에서 특강을 등록할 때 담당 강사를 고르면, 그 강사의 국성티처에 자동으로 나타난다(별도 생성 없음).
+        //  - 데이터는 홈페이지 Supabase 의 sp_* 테이블이고 RPC(sp_att_*)로 읽고 쓴다. 별도 비밀번호는 없다(국성티처 강사 로그인으로 들어온다).
+        //  - 강사 모드: 본인 특강만 / 관리자 모드: 선택한 강사(통합출석부는 전체)
+        // =====================================================================
+        var spClasses = [];            // sp_att_classes 결과
+        var spRosters = {};            // class_id -> 명단
+        var spOpen = {};               // class_id -> 펼침 여부
+        var spLoading = false;
+
+        function spEsc(t) { return String(t == null ? '' : t).replace(/[&<>"']/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]; }); }
+        // "정다운T", "정다운 선생님", "황성웅 원장님" → "정다운"
+        function spNormTeacher(t) { return String(t || '').replace(/\s+/g, '').replace(/(선생님|원장님|T)$/i, ''); }
+        function spToday() { return getFormattedDate(new Date()); }
+        function spFmtDate(d) {
+            var x = parseYmdToLocalDate(d); if (!x) return d;
+            return (x.getMonth() + 1) + '/' + x.getDate() + '(' + ['일', '월', '화', '수', '목', '금', '토'][x.getDay()] + ')';
+        }
+
+        function spTargetTeacher() {
+            var t = getCurrentActiveTeacher();
+            return t === "통합출석부" ? null : t;   // null = 전체
+        }
+
+        function spRerenderIfOpen() {
+            var sec = document.getElementById("tab-special");
+            if (sec && !sec.classList.contains("hidden")) spRender();
+        }
+
+        async function spRpc(name, args) {
+            if (!supabaseClient) return { error: { message: '서버에 연결할 수 없습니다.' } };
+            return await supabaseClient.rpc(name, args);
+        }
+
+        async function spReload() {
+            if (spLoading) return;
+            var body = document.getElementById("special-body");
+            if (!body) return;
+            spLoading = true;
+            body.innerHTML = '<div class="text-center text-sm text-zinc-400 py-10">불러오는 중...</div>';
+            var res = await spRpc('sp_att_classes', {});
+            spLoading = false;
+            if (res.error) {
+                body.innerHTML = '<div class="text-center text-sm text-red-500 py-10">불러오지 못했습니다: ' + spEsc(res.error.message) + '</div>';
+                return;
+            }
+            spClasses = res.data || [];
+            spRender();
+            // 이미 펼쳐둔 회차의 명단은 최신으로 다시 받는다
+            Object.keys(spOpen).forEach(function (id) { if (spOpen[id]) spLoadRoster(parseInt(id, 10)); });
+        }
+
+        function spVisibleClasses() {
+            var teacher = spTargetTeacher();
+            return spClasses.filter(function (c) { return !teacher || spNormTeacher(c.instructor) === teacher; });
+        }
+
+        function spRender() {
+            var body = document.getElementById("special-body");
+            var title = document.getElementById("special-title");
+            if (!body) return;
+            var teacher = spTargetTeacher();
+            if (title) title.innerText = teacher ? teacher + 'T 특강 출석부' : '전체 특강 출석부';
+            var list = spVisibleClasses();
+            if (!list.length) {
+                body.innerHTML = '<div class="bg-white p-10 rounded-2xl border border-zinc-200 text-center text-sm text-zinc-400">' +
+                    (teacher ? spEsc(teacher) + 'T 담당으로 등록된 특강 회차가 없습니다.' : '등록된 특강 회차가 없습니다.') + '</div>';
+                return;
+            }
+            var today = spToday();
+            var upcoming = list.filter(function (c) { return c.class_date >= today; });
+            var past = list.filter(function (c) { return c.class_date < today; }).reverse();
+            var html = upcoming.map(spCardHtml).join('');
+            if (past.length) {
+                html += '<details class="bg-zinc-50 rounded-2xl border border-zinc-200 p-3"><summary class="cursor-pointer text-sm font-semibold text-zinc-500 px-2 py-1">지난 회차 ' + past.length + '개</summary><div class="space-y-4 mt-3">' + past.map(spCardHtml).join('') + '</div></details>';
+            }
+            body.innerHTML = html;
+        }
+
+        function spCardHtml(c) {
+            var open = !!spOpen[c.id];
+            var isToday = c.class_date === spToday();
+            var head = '<button onclick="spToggle(' + c.id + ')" class="w-full flex flex-wrap items-center justify-between gap-2 text-left">' +
+                '<div><div class="font-extrabold text-zinc-800">' + spEsc(c.title) + (isToday ? ' <span class="ml-1 text-[11px] px-2 py-0.5 rounded-full bg-primary text-white align-middle">오늘</span>' : '') + '</div>' +
+                '<div class="text-xs text-zinc-500 mt-0.5">' + spFmtDate(c.class_date) + ' · ' + spEsc(c.label) + (spTargetTeacher() ? '' : ' · ' + spEsc(c.instructor)) + '</div></div>' +
+                '<div class="text-sm font-bold text-primary">' + c.taken + '명 ' + (open ? '▲' : '▼') + '</div></button>';
+            var inner = '';
+            if (open) inner = '<div class="mt-3 pt-3 border-t border-zinc-100" id="sp-roster-' + c.id + '">' + spRosterHtml(c.id) + '</div>';
+            return '<div class="bg-white p-4 rounded-2xl shadow-sm border ' + (isToday ? 'border-primary' : 'border-zinc-200') + '">' + head + inner + '</div>';
+        }
+
+        function spToggle(id) {
+            spOpen[id] = !spOpen[id];
+            spRender();
+            if (spOpen[id]) spLoadRoster(id);
+        }
+
+        async function spLoadRoster(id) {
+            var res = await spRpc('sp_att_roster', { p_class: id });
+            if (res.error) { alert('명단을 불러오지 못했습니다: ' + res.error.message); return; }
+            spRosters[id] = res.data || [];
+            var el = document.getElementById('sp-roster-' + id);
+            if (el) el.innerHTML = spRosterHtml(id);
+        }
+
+        function spRosterHtml(id) {
+            var r = spRosters[id];
+            if (!r) return '<div class="text-center text-xs text-zinc-400 py-4">불러오는 중...</div>';
+            if (!r.length) return '<div class="text-center text-xs text-zinc-400 py-4">신청한 학생이 없습니다.</div>';
+            var present = r.filter(function (x) { return x.present; }).length;
+            var rows = r.map(function (x) {
+                return '<div class="flex flex-wrap items-center gap-2 py-2 border-b border-zinc-100 last:border-0">' +
+                    '<label class="flex items-center gap-2 min-w-[150px] cursor-pointer"><input type="checkbox" class="w-5 h-5" ' + (x.present ? 'checked' : '') + ' onchange="spMark(' + id + ",'" + x.student_id + "',this.checked)" + '">' +
+                    '<span class="font-semibold text-sm text-zinc-800">' + spEsc(x.name) + '</span></label>' +
+                    '<span class="text-xs text-zinc-500">' + spEsc(x.school) + ' ' + spEsc(x.grade) + '</span>' +
+                    '<input type="text" value="' + spEsc(x.memo) + '" placeholder="메모" onchange="spMemo(' + id + ",'" + x.student_id + "',this.value)" + '" class="ml-auto border border-zinc-200 rounded-lg px-2 py-1 text-xs w-32 md:w-44 focus:outline-none focus:ring-1 focus:ring-primary"></div>';
+            }).join('');
+            return '<div class="flex justify-between items-center mb-1"><span class="text-xs text-zinc-500">출석 ' + present + ' / ' + r.length + '명</span>' +
+                '<button onclick="spAllPresent(' + id + ')" class="px-3 py-1 rounded-lg text-xs font-semibold bg-zinc-100 text-zinc-700 hover:bg-zinc-200">전체 출석</button></div>' + rows;
+        }
+
+        async function spSave(id, studentId, present, memo) {
+            var res = await spRpc('sp_att_mark', { p_class: id, p_student: studentId, p_present: present, p_memo: memo || '' });
+            if (res.error) {
+                alert('저장하지 못했습니다: ' + res.error.message);
+                return false;
+            }
+            return true;
+        }
+        function spFind(id, studentId) { return (spRosters[id] || []).find(function (x) { return x.student_id === studentId; }); }
+
+        async function spMark(id, studentId, present) {
+            var st = spFind(id, studentId); if (!st) return;
+            var ok = await spSave(id, studentId, present, st.memo);
+            st.present = ok ? present : !present;
+            var el = document.getElementById('sp-roster-' + id); if (el) el.innerHTML = spRosterHtml(id);
+        }
+        async function spMemo(id, studentId, memo) {
+            var st = spFind(id, studentId); if (!st) return;
+            if (await spSave(id, studentId, st.present, memo)) st.memo = memo;
+        }
+        async function spAllPresent(id) {
+            var r = spRosters[id] || [];
+            var todo = r.filter(function (x) { return !x.present; });
+            if (!todo.length) return;
+            var results = await Promise.all(todo.map(function (x) { return spSave(id, x.student_id, true, x.memo); }));
+            todo.forEach(function (x, i) { if (results[i]) x.present = true; });
+            var el = document.getElementById('sp-roster-' + id); if (el) el.innerHTML = spRosterHtml(id);
         }
     </script>
 </body>
