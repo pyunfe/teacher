@@ -4292,7 +4292,8 @@
         // =====================================================================
         var spClasses = [];            // sp_att_classes 결과
         var spRosters = {};            // class_id -> 명단
-        var spOpen = {};               // class_id -> 펼침 여부
+        var spOpen = {};               // 트리 노드 key -> 펼침 여부 (C:분류 / L:특강 / S:슬롯)
+        var spSelected = null;         // 오른쪽에 명단을 보여주는 class_id
         var spLoading = false;
 
         function spEsc(t) { return String(t == null ? '' : t).replace(/[&<>"']/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]; }); }
@@ -4333,8 +4334,8 @@
             }
             spClasses = res.data || [];
             spRender();
-            // 이미 펼쳐둔 회차의 명단은 최신으로 다시 받는다
-            Object.keys(spOpen).forEach(function (id) { if (spOpen[id]) spLoadRoster(parseInt(id, 10)); });
+            // 보고 있던 회차의 명단은 최신으로 다시 받는다
+            if (spSelected) spLoadRoster(spSelected);
         }
 
         function spVisibleClasses() {
@@ -4354,32 +4355,50 @@
                     (teacher ? spEsc(teacher) + 'T 담당으로 등록된 특강 회차가 없습니다.' : '등록된 특강 회차가 없습니다.') + '</div>';
                 return;
             }
+            var cats = ['중등', '고1', '고2', '고3', '기타'];
+            var catOf = function (c) { return cats.indexOf(c.category) >= 0 ? c.category : '기타'; };
             var today = spToday();
-            var upcoming = list.filter(function (c) { return c.class_date >= today; });
-            var past = list.filter(function (c) { return c.class_date < today; }).reverse();
-            var html = upcoming.map(spCardHtml).join('');
-            if (past.length) {
-                html += '<details class="bg-zinc-50 rounded-2xl border border-zinc-200 p-3"><summary class="cursor-pointer text-sm font-semibold text-zinc-500 px-2 py-1">지난 회차 ' + past.length + '개</summary><div class="space-y-4 mt-3">' + past.map(spCardHtml).join('') + '</div></details>';
-            }
-            body.innerHTML = html;
+            var tree = cats.map(function (cat) {
+                var inCat = list.filter(function (c) { return catOf(c) === cat; });
+                if (!inCat.length) return '';
+                var lecIds = [], lecs = {};
+                inCat.forEach(function (c) { if (!lecs[c.lecture_id]) { lecs[c.lecture_id] = []; lecIds.push(c.lecture_id); } lecs[c.lecture_id].push(c); });
+                var lecHtml = lecIds.map(function (lid) {
+                    var cs = lecs[lid], first = cs[0];
+                    var labels = [], bySlot = {};
+                    cs.forEach(function (c) { if (!bySlot[c.label]) { bySlot[c.label] = []; labels.push(c.label); } bySlot[c.label].push(c); });
+                    var slotHtml = labels.map(function (lb, i) {
+                        var rows = bySlot[lb].map(function (c) {
+                            var sel = spSelected === c.id, isToday = c.class_date === today;
+                            return '<button onclick="spPick(' + c.id + ')" class="w-full flex items-center justify-between px-3 py-2 text-sm border-b border-zinc-100 last:border-0 ' + (sel ? 'bg-indigo-50 font-bold text-primary' : 'hover:bg-zinc-50') + '">' +
+                                '<span>' + spFmtDate(c.class_date) + (isToday ? ' <span class="ml-1 text-[10px] px-1.5 py-0.5 rounded-full bg-primary text-white">오늘</span>' : '') + ' <span class="text-xs text-zinc-400">' + c.taken + '명</span></span>' +
+                                '<span class="text-xs font-bold text-primary">조회 →</span></button>';
+                        }).join('');
+                        return spNode('S:' + lid + ':' + i, '🕒 ' + spEsc(lb), rows, 'bg-zinc-50');
+                    }).join('');
+                    return spNode('L:' + lid, '📘 ' + spEsc(first.title) + ' <span class="text-xs font-semibold text-zinc-400">(' + spEsc(first.instructor) + ')</span>', slotHtml, 'bg-white');
+                }).join('');
+                return spNode('C:' + cat, '📁 ' + cat, lecHtml, 'bg-zinc-100');
+            }).join('');
+            var cur = spClasses.filter(function (c) { return c.id === spSelected; })[0];
+            var pane = cur
+                ? '<div class="mb-3 pb-3 border-b border-zinc-100"><div class="font-extrabold text-zinc-800">' + spEsc(cur.title) + '</div><div class="text-xs text-zinc-500 mt-0.5">' +
+                  spEsc(catOf(cur)) + ' · ' + spFmtDate(cur.class_date) + ' · ' + spEsc(cur.label) + '</div></div><div id="sp-roster-' + cur.id + '">' + spRosterHtml(cur.id) + '</div>'
+                : '<div class="text-center text-sm text-zinc-400 py-16">왼쪽에서 날짜의 "조회 →"를 눌러주세요.</div>';
+            body.innerHTML = '<div class="grid gap-4 md:grid-cols-[360px_1fr] items-start">' +
+                '<div class="space-y-2 md:max-h-[70vh] overflow-y-auto pr-1">' + tree + '</div>' +
+                '<div class="bg-white p-4 rounded-2xl shadow-sm border border-zinc-200 min-h-[200px]">' + pane + '</div></div>';
         }
 
-        function spCardHtml(c) {
-            var open = !!spOpen[c.id];
-            var isToday = c.class_date === spToday();
-            var head = '<button onclick="spToggle(' + c.id + ')" class="w-full flex flex-wrap items-center justify-between gap-2 text-left">' +
-                '<div><div class="font-extrabold text-zinc-800">' + spEsc(c.title) + (isToday ? ' <span class="ml-1 text-[11px] px-2 py-0.5 rounded-full bg-primary text-white align-middle">오늘</span>' : '') + '</div>' +
-                '<div class="text-xs text-zinc-500 mt-0.5">' + spFmtDate(c.class_date) + ' · ' + spEsc(c.label) + (spTargetTeacher() ? '' : ' · ' + spEsc(c.instructor)) + '</div></div>' +
-                '<div class="text-sm font-bold text-primary">' + c.taken + '명 ' + (open ? '▲' : '▼') + '</div></button>';
-            var inner = '';
-            if (open) inner = '<div class="mt-3 pt-3 border-t border-zinc-100" id="sp-roster-' + c.id + '">' + spRosterHtml(c.id) + '</div>';
-            return '<div class="bg-white p-4 rounded-2xl shadow-sm border ' + (isToday ? 'border-primary' : 'border-zinc-200') + '">' + head + inner + '</div>';
+        function spNode(key, head, inner, bg) {
+            var open = !!spOpen[key];
+            return '<div class="rounded-xl border border-zinc-200 overflow-hidden ' + bg + '"><button onclick="spNodeToggle(\'' + key + '\')" class="w-full flex items-center justify-between px-3 py-2.5 text-left font-bold text-sm text-zinc-800">' +
+                '<span>' + head + '</span><span class="text-zinc-400">' + (open ? '▲' : '▼') + '</span></button>' +
+                (open ? '<div class="p-2 space-y-2 bg-white/60">' + inner + '</div>' : '') + '</div>';
         }
-
-        function spToggle(id) {
-            spOpen[id] = !spOpen[id];
-            spRender();
-            if (spOpen[id]) spLoadRoster(id);
+        function spNodeToggle(key) { spOpen[key] = !spOpen[key]; spRender(); }
+        function spPick(id) {
+            spSelected = id; spRender(); spLoadRoster(id);
         }
 
         async function spLoadRoster(id) {
