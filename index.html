@@ -99,7 +99,6 @@
                             <optgroup label="중등부">
                                 <option value="정다운">정다운T</option>
                                 <option value="김신형">김신형T</option>
-                                <option value="문지현">문지현T</option>
                             </optgroup>
                             <optgroup label="고등부">
                                 <option value="강윤지">강윤지T</option>
@@ -578,14 +577,14 @@
         var moveSelectedStudents = []; // [{name, teacherName, slotId, identityKey}, ...] - 시간대 카드(칸) 단위로 선택됨
 
         const teacherMap = {
-            "9565": "황성웅", "9414": "정다운", "9062": "김신형", "2368": "문지현",
+            "9565": "황성웅", "9414": "정다운", "9062": "김신형",
             "9248": "강윤지", "3374": "이현영", "2428": "김명일",
             "1357": "김준영", "1316": "박신언", "5282": "윤태민",
             "9270": "고광준", "4782": "이영찬", "5068": "오세현"
         };
 
         const orderedTeacherNames = [
-            "황성웅", "정다운", "김신형", "문지현",
+            "황성웅", "정다운", "김신형",
             "강윤지", "이현영", "김명일",
             "김준영", "박신언", "윤태민",
             "고광준", "이영찬", "오세현"
@@ -596,7 +595,7 @@
         const INTEGRATED_TEACHER_GROUPS = [
             { key: "all", label: "전체", teachers: null },
             { key: "hwang", label: "황성웅", teachers: ["황성웅"] },
-            { key: "middle", label: "중등부", teachers: ["정다운", "김신형", "문지현"] },
+            { key: "middle", label: "중등부", teachers: ["정다운", "김신형"] },
             { key: "g1", label: "고1", teachers: ["강윤지", "이현영", "김명일"] },
             { key: "g2", label: "고2", teachers: ["김준영", "박신언", "윤태민"] },
             { key: "g3", label: "고3", teachers: ["고광준", "이영찬", "오세현"] }
@@ -621,7 +620,7 @@
         ];
 
         const TEACHER_COLORS = {
-            "황성웅": "#980000", "정다운": "#EDE6D6", "김신형": "#D9D2E9", "문지현": "#F4CCCC",
+            "황성웅": "#980000", "정다운": "#EDE6D6", "김신형": "#D9D2E9",
             "강윤지": "#EAD1DC", "이현영": "#FFF2CC", "김명일": "#CFE2F3", "김준영": "#D9EAD3",
             "박신언": "#C9DAF8", "윤태민": "#FFE599", "고광준": "#B7E1CD", "이영찬": "#FCE5CD",
             "오세현": "#D0E0E3"
