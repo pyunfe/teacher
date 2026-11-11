@@ -4292,7 +4292,7 @@
         var spClasses = [];            // sp_att_classes 결과
         var spRosters = {};            // class_id -> 명단
         var spOpen = {};               // 트리 노드 key -> 펼침 여부 (C:분류 / L:특강 / S:슬롯)
-        var spSelected = null;         // 오른쪽에 명단을 보여주는 class_id
+        var spSel = {};                // 특강+시간대 key -> 선택된 회차 class_id
         var spLoading = false;
 
         function spEsc(t) { return String(t == null ? '' : t).replace(/[&<>"']/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]; }); }
@@ -4332,9 +4332,8 @@
                 return;
             }
             spClasses = res.data || [];
+            spRosters = {};   // 명단은 보이는 회차마다 최신으로 다시 받는다
             spRender();
-            // 보고 있던 회차의 명단은 최신으로 다시 받는다
-            if (spSelected) spLoadRoster(spSelected);
         }
 
         function spVisibleClasses() {
@@ -4354,50 +4353,93 @@
                     (teacher ? spEsc(teacher) + 'T 담당으로 등록된 특강 회차가 없습니다.' : '등록된 특강 회차가 없습니다.') + '</div>';
                 return;
             }
-            var cats = ['중등', '고1', '고2', '고3', '기타'];
-            var catOf = function (c) { return cats.indexOf(c.category) >= 0 ? c.category : '기타'; };
             var today = spToday();
-            var tree = cats.map(function (cat) {
-                var inCat = list.filter(function (c) { return catOf(c) === cat; });
-                if (!inCat.length) return '';
-                var lecIds = [], lecs = {};
-                inCat.forEach(function (c) { if (!lecs[c.lecture_id]) { lecs[c.lecture_id] = []; lecIds.push(c.lecture_id); } lecs[c.lecture_id].push(c); });
-                var lecHtml = lecIds.map(function (lid) {
-                    var cs = lecs[lid], first = cs[0];
-                    var labels = [], bySlot = {};
-                    cs.forEach(function (c) { if (!bySlot[c.label]) { bySlot[c.label] = []; labels.push(c.label); } bySlot[c.label].push(c); });
-                    var slotHtml = labels.map(function (lb, i) {
-                        var rows = bySlot[lb].map(function (c) {
-                            var sel = spSelected === c.id, isToday = c.class_date === today;
-                            return '<button onclick="spPick(' + c.id + ')" class="w-full flex items-center justify-between px-3 py-2 text-sm border-b border-zinc-100 last:border-0 ' + (sel ? 'bg-indigo-50 font-bold text-primary' : 'hover:bg-zinc-50') + '">' +
-                                '<span>' + spFmtDate(c.class_date) + (isToday ? ' <span class="ml-1 text-[10px] px-1.5 py-0.5 rounded-full bg-primary text-white">오늘</span>' : '') + ' <span class="text-xs text-zinc-400">' + c.taken + '명</span></span>' +
-                                '<span class="text-xs font-bold text-primary">조회 →</span></button>';
-                        }).join('');
-                        return spNode('S:' + lid + ':' + i, '🕒 ' + spEsc(lb), rows, 'bg-zinc-50');
-                    }).join('');
-                    return spNode('L:' + lid, '📘 ' + spEsc(first.title) + ' <span class="text-xs font-semibold text-zinc-400">(' + spEsc(first.instructor) + ')</span>', slotHtml, 'bg-white');
+            var dayNames = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
+            var dayOrder = [1, 2, 3, 4, 5, 6, 0];
+
+            // (특강 + 시간대 + 요일) 단위로 묶는다. 한 묶음 = 출석부의 시간대 박스 하나, 안에서 날짜를 고른다.
+            var slots = {}, slotList = [];
+            list.forEach(function (c) {
+                var d = parseYmdToLocalDate(c.class_date);
+                var wd = d ? d.getDay() : 0;
+                var key = c.lecture_id + ':' + c.label + ':' + wd;
+                if (!slots[key]) { slots[key] = { key: key, lid: c.lecture_id, cat: c.category, wd: wd, label: c.label, title: c.title, instructor: c.instructor, tn: spNormTeacher(c.instructor), rows: [] }; slotList.push(slots[key]); }
+                slots[key].rows.push(c);
+            });
+
+            var shown = [];
+            var cardHtml = function (sl, soloTitle) {
+                var rows = sl.rows.slice().sort(function (a, b) { return a.class_date < b.class_date ? -1 : a.class_date > b.class_date ? 1 : 0; });
+                var cur = rows.filter(function (c) { return c.id === spSel[sl.key]; })[0]
+                    || rows.filter(function (c) { return c.class_date === today; })[0]
+                    || rows.filter(function (c) { return c.class_date >= today; })[0]
+                    || rows[rows.length - 1];
+                spSel[sl.key] = cur.id;
+                shown.push(cur.id);
+                var opts = rows.map(function (c) {
+                    return '<option value="' + c.id + '"' + (c.id === cur.id ? ' selected' : '') + '>' + spFmtDate(c.class_date) + (c.class_date === today ? ' · 오늘' : '') + '</option>';
                 }).join('');
-                return spNode('C:' + cat, '📁 ' + cat, lecHtml, 'bg-zinc-100');
-            }).join('');
-            var cur = spClasses.filter(function (c) { return c.id === spSelected; })[0];
-            var pane = cur
-                ? '<div class="mb-3 pb-3 border-b border-zinc-100"><div class="font-extrabold text-zinc-800">' + spEsc(cur.title) + '</div><div class="text-xs text-zinc-500 mt-0.5">' +
-                  spEsc(catOf(cur)) + ' · ' + spFmtDate(cur.class_date) + ' · ' + spEsc(cur.label) + '</div></div><div id="sp-roster-' + cur.id + '">' + spRosterHtml(cur.id) + '</div>'
-                : '<div class="text-center text-sm text-zinc-400 py-16">왼쪽에서 날짜의 "조회 →"를 눌러주세요.</div>';
-            body.innerHTML = '<div class="grid gap-4 md:grid-cols-[360px_1fr] items-start">' +
-                '<div class="space-y-2 md:max-h-[70vh] overflow-y-auto pr-1">' + tree + '</div>' +
-                '<div class="bg-white p-4 rounded-2xl shadow-sm border border-zinc-200 min-h-[200px]">' + pane + '</div></div>';
+                return '<div class="bg-zinc-50/50 p-4 rounded-xl border border-zinc-200 self-start w-[385px] shrink-0">' +
+                    '<div class="flex justify-between items-center mb-3 gap-2">' +
+                    '<span class="text-xs font-bold text-zinc-700 truncate">' + (soloTitle ? spEsc(sl.label) : '<span class="text-primary">[' + spEsc(sl.tn) + 'T]</span> ' + spEsc(sl.title) + ' ' + spEsc(sl.label)) + '</span>' +
+                    '<select onchange="spPickDate(' + spEsc(JSON.stringify(sl.key)) + ', this.value)" class="border border-zinc-300 rounded-lg px-2 py-1 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-primary font-bold text-primary shrink-0">' + opts + '</select></div>' +
+                    '<div id="sp-roster-' + cur.id + '">' + spRosterHtml(cur.id) + '</div></div>';
+            };
+
+            var html = '';
+            if (teacher) {
+                // 강사 본인 출석부: 특강마다 카드 하나, 수요일·목요일 등 시간대 박스를 한 줄로 나열
+                var cats = ['중등', '고1', '고2', '고3', '기타'];
+                var catIdx = function (s) { var i = cats.indexOf(s.cat); return i < 0 ? cats.length - 1 : i; };
+                var lids = [], byLec = {};
+                slotList.slice().sort(function (a, b) { return catIdx(a) - catIdx(b); }).forEach(function (sl) {
+                    if (!byLec[sl.lid]) { byLec[sl.lid] = []; lids.push(sl.lid); }
+                    byLec[sl.lid].push(sl);
+                });
+                lids.forEach(function (lid) {
+                    var ss = byLec[lid].sort(function (a, b) { return ((a.wd + 6) % 7) - ((b.wd + 6) % 7) || (a.label || '').localeCompare(b.label || '', 'ko', { numeric: true }); });
+                    html += '<div class="bg-white p-5 rounded-2xl shadow-sm border border-zinc-200">' +
+                        '<div class="flex justify-between items-center mb-4 pb-2 border-b border-zinc-100"><h3 class="text-primary font-extrabold text-lg">' + spEsc(ss[0].title) +
+                        ' <span class="text-xs font-semibold text-zinc-400">(' + spEsc(ss[0].instructor) + ' · ' + spEsc(cats[catIdx(ss[0])]) + ')</span></h3></div>' +
+                        '<div class="horizontal-scroll-container overflow-x-auto pb-3"><div class="flex space-x-4 items-start min-max-content">' +
+                        ss.map(function (sl) { return cardHtml(sl, true); }).join('') + '</div></div></div>';
+                });
+                body.innerHTML = '<div class="space-y-8">' + html + '</div>';
+                shown.forEach(function (id) { if (!spRosters[id]) spLoadRoster(id); });
+                return;
+            }
+            dayOrder.forEach(function (wd) {
+                var daySlots = slotList.filter(function (s) { return s.wd === wd; });
+                if (!daySlots.length) return;
+                daySlots.sort(function (a, b) { return (a.rows[0].label || '').localeCompare(b.rows[0].label || '', 'ko', { numeric: true }); });
+                var inner;
+                if (teacher) {
+                    // 강사 본인 출석부: 시간대 박스를 가로로 나열
+                    inner = '<div class="horizontal-scroll-container overflow-x-auto pb-3"><div class="flex space-x-4 items-start min-max-content">' + daySlots.map(cardHtml).join('') + '</div></div>';
+                } else {
+                    // 통합(관리자): 강사별 세로 열, 같은 요일 안에 선생님들 출석부를 나란히
+                    var teachers = [];
+                    var known = (typeof orderedTeacherNames !== 'undefined' ? orderedTeacherNames : []);
+                    known.forEach(function (t) { if (daySlots.some(function (s) { return s.tn === t; })) teachers.push(t); });
+                    daySlots.forEach(function (s) { if (teachers.indexOf(s.tn) < 0) teachers.push(s.tn); });
+                    var cards = '';
+                    teachers.forEach(function (t, ci) {
+                        daySlots.filter(function (s) { return s.tn === t; }).forEach(function (s, ri) {
+                            cards += '<div style="grid-column:' + (ci + 1) + ';grid-row:' + (ri + 1) + ';">' + cardHtml(s) + '</div>';
+                        });
+                    });
+                    inner = '<div class="horizontal-scroll-container overflow-x-auto pb-3"><div class="grid gap-4 items-start" style="grid-template-columns: repeat(' + teachers.length + ', 385px);">' + cards + '</div></div>';
+                }
+                html += '<div class="bg-white p-5 rounded-2xl shadow-sm border border-zinc-200">' +
+                    '<div class="flex justify-between items-center mb-4 pb-2 border-b border-zinc-100"><h3 class="text-primary font-extrabold text-lg">' + dayNames[wd] + '</h3></div>' + inner + '</div>';
+            });
+            body.innerHTML = '<div class="space-y-8">' + html + '</div>';
+            shown.forEach(function (id) { if (!spRosters[id]) spLoadRoster(id); });
         }
 
-        function spNode(key, head, inner, bg) {
-            var open = !!spOpen[key];
-            return '<div class="rounded-xl border border-zinc-200 overflow-hidden ' + bg + '"><button onclick="spNodeToggle(\'' + key + '\')" class="w-full flex items-center justify-between px-3 py-2.5 text-left font-bold text-sm text-zinc-800">' +
-                '<span>' + head + '</span><span class="text-zinc-400">' + (open ? '▲' : '▼') + '</span></button>' +
-                (open ? '<div class="p-2 space-y-2 bg-white/60">' + inner + '</div>' : '') + '</div>';
-        }
-        function spNodeToggle(key) { spOpen[key] = !spOpen[key]; spRender(); }
-        function spPick(id) {
-            spSelected = id; spRender(); spLoadRoster(id);
+        function spPickDate(key, id) {
+            spSel[key] = parseInt(id, 10);
+            spRender();
         }
 
         async function spLoadRoster(id) {
@@ -4414,14 +4456,18 @@
             if (!r.length) return '<div class="text-center text-xs text-zinc-400 py-4">신청한 학생이 없습니다.</div>';
             var present = r.filter(function (x) { return x.present; }).length;
             var rows = r.map(function (x) {
-                return '<div class="flex flex-wrap items-center gap-2 py-2 border-b border-zinc-100 last:border-0">' +
-                    '<label class="flex items-center gap-2 min-w-[150px] cursor-pointer"><input type="checkbox" class="w-5 h-5" ' + (x.present ? 'checked' : '') + ' onchange="spMark(' + id + ",'" + x.student_id + "',this.checked)" + '">' +
-                    '<span class="font-semibold text-sm text-zinc-800">' + spEsc(x.name) + '</span></label>' +
-                    '<span class="text-xs text-zinc-500">' + spEsc(x.school) + ' ' + spEsc(x.grade) + '</span>' +
-                    '<input type="text" value="' + spEsc(x.memo) + '" placeholder="메모" onchange="spMemo(' + id + ",'" + x.student_id + "',this.value)" + '" class="ml-auto border border-zinc-200 rounded-lg px-2 py-1 text-xs w-32 md:w-44 focus:outline-none focus:ring-1 focus:ring-primary"></div>';
+                var attCls = x.present ? "bg-[#dcfce7] text-[#15803d] font-bold" : "bg-zinc-100 text-zinc-500 font-semibold";
+                var absCls = !x.present ? "bg-[#fee2e2] text-[#b91c1c] font-bold" : "bg-zinc-100 text-zinc-500 font-semibold";
+                var sid = "'" + x.student_id + "'";
+                return '<div class="flex items-center p-2 rounded-lg border border-zinc-200 bg-white shadow-sm hover:border-primary">' +
+                    '<div class="w-24 shrink-0 truncate mr-1.5"><span class="font-bold text-xs text-zinc-900">' + spEsc(x.name) + '</span> <span class="text-[10px] text-zinc-500">(' + spEsc(x.school) + ' ' + spEsc(x.grade) + ')</span></div>' +
+                    '<div class="flex items-center space-x-1 shrink-0 mr-1.5">' +
+                    '<button onclick="spMark(' + id + ',' + sid + ',true)" class="px-2 py-0.5 text-[11px] rounded ' + attCls + '">출석</button>' +
+                    '<button onclick="spMark(' + id + ',' + sid + ',false)" class="px-2 py-0.5 text-[11px] rounded ' + absCls + '">결석</button></div>' +
+                    '<div class="flex-1 min-w-0"><input type="text" value="' + spEsc(x.memo) + '" placeholder="비고" onchange="spMemo(' + id + ',' + sid + ',this.value)" class="w-full text-[11px] border border-zinc-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary text-zinc-700 bg-white"></div></div>';
             }).join('');
-            return '<div class="flex justify-between items-center mb-1"><span class="text-xs text-zinc-500">출석 ' + present + ' / ' + r.length + '명</span>' +
-                '<button onclick="spAllPresent(' + id + ')" class="px-3 py-1 rounded-lg text-xs font-semibold bg-zinc-100 text-zinc-700 hover:bg-zinc-200">전체 출석</button></div>' + rows;
+            return '<div class="flex justify-between items-center mb-2"><span class="text-xs text-zinc-500">출석 ' + present + ' / ' + r.length + '명</span>' +
+                '<button onclick="spAllPresent(' + id + ')" class="px-3 py-1 rounded-lg text-xs font-semibold bg-zinc-100 text-zinc-700 hover:bg-zinc-200">전체 출석</button></div><div class="space-y-1.5">' + rows + '</div>';
         }
 
         async function spSave(id, studentId, present, memo) {
