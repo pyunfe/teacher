@@ -652,8 +652,9 @@
                     return;
                 }
                 if (data && data.length > 0) {
+                    const rowStore = data.find(r => r.id === 'studentStore');
                     data.forEach(row => {
-                        if (row.id === 'teacherDataStore') teacherDataStore = row.data;
+                        if (row.id === 'teacherDataStore') teacherDataStore = resolveTeacherData(row.data, rowStore && rowStore.data);
                         if (row.id === 'attendanceRecords') attendanceRecords = row.data;
                         if (row.id === 'slotFreeMemos') slotFreeMemos = row.data || {};
                         if (row.id === 'globalReservations') globalReservations = row.data;
@@ -667,6 +668,7 @@
                             };
                         }
                     });
+                    normalizeSids();
                 }
             } catch (err) {
                 console.error("Supabase 데이터 연결 실패:", err);
@@ -756,6 +758,170 @@
             pending.fn();
         }
 
+        // ===== [학생 중심 구조 2단계] 새 구조(studentStore) 변환기 =====
+        // 국성티처-백업/tools/convert.js 와 동일 코드(여기서 고치면 그쪽도 같이 고칠 것). toStore: 옛 teacherDataStore -> 새 구조.
+        // 지금은 옛 구조가 원본이고, 저장할 때마다 새 구조 사본(app_data id='studentStore')을 같이 만들어 둔다(이중 쓰기).
+        // 1단계: teacherDataStore(옛, 강사→학생) <-> studentStore(새, 학생 최상위) 변환. 파일만 다룸(Supabase 안 건드림).
+        //
+        // 새 구조 학생:
+        //  { id, ...개인정보(name, school, grade, phone, parentPhone, rawTongTongName, registeredAt 등 그대로),
+        //    enrollments:[{fromWeek|null, toWeek|null, endReason?:'leave'|'excluded'|'deleted', endedAt?, returnedAt?}],
+        //    assignments:[{teacher, slotIds, fromWeek|null, toWeek|null, transferredFrom?, transferredAt?}] }  // 마지막 = 현재(toWeek null)
+        //  가시성: 그 주차가 어떤 enrollment 구간에 들고 && 그 강사의 assignment 구간에 들면 보임.
+        const slotIdsOf = s => Array.isArray(s.slotIds) ? s.slotIds.slice() : (s.slotId ? [s.slotId] : []);
+        const ABSORBED = ['slotId', 'slotIds', 'leaves', 'prevTeachers', 'teacherSince', 'transferredFrom', 'transferredAt', 'transferredTo',
+          'deletedWeekKey', 'deletedAt', 'returnedAt', 'status'];
+        
+        // ---- 주차 키 산술 ----
+        const shiftWeek = (wk, n) => { const d = new Date(wk.slice(0, 10) + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + 7 * n); return d.toISOString().slice(0, 10) + ' 주차'; };
+        
+        // 퇴원 주차(del, 포함) ~ 복귀 주차(ret, 포함) 사이 공백을 구간에서 도려냄. 공백이 0주(del+1==ret)여도 구간은 나눈다(복귀 표시용).
+        function splitLeave(segs, del, ret, extra) {
+          const out = [];
+          for (const s of segs) {
+            const startsBeforeOrAtDel = s.fromWeek === null || s.fromWeek <= del;
+            const endsAfterOrAtRet = s.toWeek === null || s.toWeek >= ret;
+            const endsBeforeDelEnd = s.toWeek !== null && s.toWeek <= del;       // 퇴원 전에 이미 끝남
+            const startsAfterRet = s.fromWeek !== null && s.fromWeek >= ret;     // 복귀 후에 시작
+            if (endsBeforeDelEnd || startsAfterRet) { out.push(s); continue; }
+            if (startsBeforeOrAtDel) {
+              const left = { fromWeek: s.fromWeek, toWeek: del, endReason: 'leave', ...extra };
+              if (s.returnedAt) left.returnedAt = s.returnedAt;
+              out.push(left);
+            }
+            if (endsAfterOrAtRet) { const right = { ...s, fromWeek: ret }; delete right.returnedAt; out.push(right); }
+          }
+          return out;
+        }
+        
+        function toStore(TDS, idMap) {
+          idMap = idMap || {};
+          const store = { version: 1, teachers: {}, students: [] }, report = { anomalies: [] }, usedIds = new Set();
+          for (const t of Object.keys(TDS)) store.teachers[t] = { slots: TDS[t].slots || { friday: [], saturday: [], sunday: [] } };
+          for (const t of Object.keys(TDS)) for (const r of (TDS[t].students || [])) {
+            // id: 기존 매핑 우선, 없으면 내용 기반 결정적 생성
+            const seed = `${t}|${r.name}|${r.school || ''}|${r.registeredAt || ''}|${r.rawTongTongName || ''}`;
+            let h = 0; for (const c of seed) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+            const base = r.sid || idMap[seed] || 'stu-' + h.toString(36).padStart(7, '0'); let id = base, n = 1;
+            while (usedIds.has(id)) id = base + '-' + (n++);
+            usedIds.add(id);
+            const st = { id };
+            for (const k of Object.keys(r)) if (!ABSORBED.includes(k) && k !== 'sid') st[k] = r[k];
+        
+            // assignments: 과거 담당들 + 현재 담당(마지막). 옛 규칙의 시작 주차 = fromWeek(teacherSince) || firstWeekKey 를 그대로 보존(명시화)
+            const fk = r.firstWeekKey || null;
+            st.assignments = (r.prevTeachers || []).map(e => {
+              if (!e.toWeek) report.anomalies.push(`toWeek 없는 prevTeachers: ${t}/${r.name}`);
+              const a = { teacher: e.teacher, slotIds: (e.slotIds || []).slice(), fromWeek: e.fromWeek || fk, toWeek: e.toWeek || null };
+              if (e.transferredFrom) a.transferredFrom = e.transferredFrom;
+              return a;
+            });
+            const cur = { teacher: t, slotIds: slotIdsOf(r), fromWeek: r.teacherSince || fk, toWeek: null };
+            if (r.teacherSince && r.teacherSince === fk) cur.sinceSet = true;   // 원본에 teacherSince가 명시돼 있었음(역변환 보존용)
+            if (r.transferredFrom) cur.transferredFrom = r.transferredFrom;
+            if (r.transferredAt) cur.transferredAt = r.transferredAt;
+            if (r.transferredTo) { cur.transferredTo = r.transferredTo; report.anomalies.push(`transferredTo 잔존: ${t}/${r.name}`); }
+        
+            // enrollments: [등록 시작 ~ 퇴원] 에서 leaves 공백을 도려냄.
+            //   등록 시작 = firstWeekKey 가 없으면 처음부터(null), 있으면 가장 이른 담당 시작 주차(복귀 학생은 firstWeekKey가 재등록 주차라 과거 담당이 더 이름)
+            const starts = st.assignments.concat([cur]).map(x => x.fromWeek);
+            const enrollFrom = (r.firstWeekKey && starts.every(x => x)) ? starts.reduce((m, x) => x < m ? x : m, starts[0]) : null;
+            let segs = [{ fromWeek: enrollFrom, toWeek: r.deletedWeekKey || null }];
+            if (r.deletedWeekKey) { segs[0].endReason = 'deleted'; if (r.deletedAt) segs[0].endedAt = r.deletedAt; }
+            const leaves = (r.leaves || []).slice().sort((a, b) => a.deletedWeekKey < b.deletedWeekKey ? -1 : 1);
+            for (const l of leaves) {
+              if (!l.deletedWeekKey || !l.returnWeekKey) { report.anomalies.push(`불완전 leave: ${t}/${r.name}`); continue; }
+              segs = splitLeave(segs, l.deletedWeekKey, l.returnWeekKey, l.deletedAt ? { endedAt: l.deletedAt } : {});
+            }
+            if (r.returnedAt && leaves.length) {            // 복귀 일자는 마지막 복귀 구간에 붙임
+              const rw = leaves[leaves.length - 1].returnWeekKey, seg = segs.find(s => s.fromWeek === rw);
+              if (seg) seg.returnedAt = r.returnedAt; else report.anomalies.push(`returnedAt 붙일 구간 없음: ${t}/${r.name}`);
+            } else if (r.returnedAt) report.anomalies.push(`leaves 없이 returnedAt: ${t}/${r.name}`);
+            st.enrollments = segs;
+            st.assignments.push(cur);
+            store.students.push(st);
+          }
+          return { store, report };
+        }
+        
+        // 새 구조 -> 옛 teacherDataStore (2단계 이중쓰기·옛 소비자용)
+        function fromStore(store) {
+          const TDS = {};
+          for (const t of Object.keys(store.teachers)) TDS[t] = { slots: store.teachers[t].slots, students: [] };
+          for (const st of store.students) {
+            const cur = st.assignments[st.assignments.length - 1];
+            const r = {};
+            for (const k of Object.keys(st)) if (!['id', 'enrollments', 'assignments'].includes(k)) r[k] = st[k];
+            r.sid = st.id;
+                    r.slotIds = cur.slotIds.slice();
+            const segs = st.enrollments;
+            const last = segs[segs.length - 1];
+            if (last.endReason === 'deleted') { r.status = 'deleted'; r.deletedWeekKey = last.toWeek; if (last.endedAt) r.deletedAt = last.endedAt; }
+            const leaves = [];
+            for (let i = 0; i < segs.length - 1; i++) {
+              const a = segs[i], b = segs[i + 1];
+              { const l = { deletedAt: a.endedAt, returnWeekKey: b.fromWeek, deletedWeekKey: a.toWeek }; Object.keys(l).forEach(k => l[k] === undefined && delete l[k]); leaves.push(l); }
+              if (b.returnedAt) r.returnedAt = b.returnedAt;
+            }
+            if (leaves.length) r.leaves = leaves;
+            if (cur.fromWeek && (cur.fromWeek !== st.firstWeekKey || cur.sinceSet)) r.teacherSince = cur.fromWeek;
+            if (cur.transferredFrom) r.transferredFrom = cur.transferredFrom;
+            if (cur.transferredAt) r.transferredAt = cur.transferredAt;
+            if (cur.transferredTo) r.transferredTo = cur.transferredTo;
+            const prev = st.assignments.slice(0, -1).map(a => { const e = { toWeek: a.toWeek, slotIds: a.slotIds.slice(), teacher: a.teacher, fromWeek: a.fromWeek === st.firstWeekKey ? null : a.fromWeek }; if (a.transferredFrom) e.transferredFrom = a.transferredFrom; return e; });
+            if (prev.length) r.prevTeachers = prev;
+            TDS[cur.teacher].students.push(r);
+          }
+          return TDS;
+        }
+        // ===== /변환기 =====
+
+        // 새 구조(studentStore)가 원본, teacherDataStore는 그 사본(미니윤철 등 옛 소비자용)이다. 저장 때마다 둘 다 쓴다(이중 쓰기).
+        // 버전 번호: store.seq(저장 횟수), store.syncedHash(이 store에서 만든 teacherDataStore의 해시).
+        // 옛 탭·미니윤철처럼 새 구조를 모르는 쪽이 teacherDataStore만 바꾸면 해시가 어긋나는 것으로 감지한다.
+        // 감지되면 그 변경이 유실되지 않도록 teacherDataStore 쪽 내용으로 새 구조를 다시 만든다(옛 쓰기 우선).
+        var STUDENT_STORE_SCHEMA = 1;
+        function canonicalJson(v) {
+            if (Array.isArray(v)) return '[' + v.map(canonicalJson).join(',') + ']';
+            if (v && typeof v === 'object') return '{' + Object.keys(v).sort().map(k => JSON.stringify(k) + ':' + canonicalJson(v[k])).join(',') + '}';
+            return JSON.stringify(v);
+        }
+        function hashString(s) {
+            let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+            for (let i = 0; i < s.length; i++) { const c = s.charCodeAt(i); h1 = Math.imul(h1 ^ c, 2654435761); h2 = Math.imul(h2 ^ c, 1597334677); }
+            h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+            h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+            return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
+        }
+        function hashTeacherData(tds) { return hashString(canonicalJson(JSON.parse(JSON.stringify(tds)))); }
+
+        // 서버에서 받은 두 row로 최신 teacherDataStore를 결정. remoteStore가 최신이면 새 구조에서 재생성, 어긋났으면(옛 쓰기 감지) 옛 구조 우선.
+        function resolveTeacherData(remoteTds, remoteStore) {
+            if (remoteStore && remoteStore.students && remoteStore.syncedHash && remoteTds) {
+                if (remoteStore.syncedHash === hashTeacherData(remoteTds)) return fromStore(remoteStore);
+                console.warn('studentStore가 teacherDataStore와 어긋남(옛 탭/미니윤철 쓰기 감지) -> teacherDataStore 기준으로 재생성');
+            }
+            return remoteTds;
+        }
+
+        // 새 구조(store)를 저장하고, 거기서 재생성한 teacherDataStore도 저장. 반환: 재생성된 teacherDataStore
+        async function saveStoreAndTds(store, prevSeq) {
+            const regenerated = fromStore(store);
+            store.schema = STUDENT_STORE_SCHEMA;
+            store.seq = (prevSeq || 0) + 1;
+            store.savedAt = new Date().toISOString();
+            store.syncedHash = hashTeacherData(regenerated);
+            await saveDataToSupabase('studentStore', store);
+            await saveDataToSupabase('teacherDataStore', regenerated);
+            return regenerated;
+        }
+        // 옛 구조 객체로 저장(변환 후 saveStoreAndTds). 3단계 이후 쓰기 함수는 쓰지 않음.
+        async function saveStudentStoreAndTds(tds, prevSeq) {
+            const { store, report } = toStore(tds);
+            if (report.anomalies.length) console.warn('studentStore 변환 이상 징후:', report.anomalies);
+            return saveStoreAndTds(store, prevSeq);
+        }
+
         // teacherName의 데이터를 저장한다. applyPatch가 주어지면 "지금 로컬에서 바꾼 것과 정확히 같은 의미의
         // 변경"을 서버 최신본 위에 다시 적용(replay)한 뒤 저장한다. 이렇게 해야 이 브라우저 탭이 한동안
         // 최신 상태를 못 받아본 사이(백그라운드, 오래 켜둔 탭 등) 다른 곳에서 이미 반영된 변경(예: 퇴원 처리)을
@@ -764,18 +930,144 @@
         async function saveTeacherData(teacherName, applyPatch) {
             const editedTeacherData = teacherDataStore[teacherName];
             return enqueueSave('teacherDataStore', async () => {
-                const remote = await fetchLatestRemoteData('teacherDataStore');
-                if (remote) teacherDataStore = remote;
+                const remoteTds = await fetchLatestRemoteData('teacherDataStore');
+                const remoteStore = await fetchLatestRemoteData('studentStore');
+                const latest = resolveTeacherData(remoteTds, remoteStore);
+                if (latest) teacherDataStore = latest;
                 if (applyPatch) {
                     if (!teacherDataStore[teacherName]) initDefaultTeacherData(teacherName);
                     applyPatch(teacherDataStore[teacherName]);
                 } else {
                     teacherDataStore[teacherName] = editedTeacherData;
                 }
-                await saveDataToSupabase('teacherDataStore', teacherDataStore);
+                teacherDataStore = await saveStudentStoreAndTds(teacherDataStore, remoteStore && remoteStore.seq);
                 refreshCurrentViewSafely();
             });
         }
+
+        // ===== [학생 중심 구조 3단계] 새 구조 전용 쓰기 연산 =====
+        // 모든 연산은 studentStore(store) 객체를 직접 고친다. 학생은 sid(= store 학생 id)로 찾고, 못 찾으면 담당 강사+이름·학교로 찾는다.
+        function storeCurAssignment(st) { return st.assignments[st.assignments.length - 1]; }
+        function storeIsDeleted(st) { const l = st.enrollments[st.enrollments.length - 1]; return !!(l && l.endReason === 'deleted'); }
+        function storeKey(st) { return st.school ? `${st.name}::${st.school}` : st.name; }
+        // ref: { sid, teacher, key(이름::학교), deleted(true/false/undefined), deletedWeekKey }
+        function storeFind(store, ref) {
+            if (ref.sid) { const st = store.students.find(s => s.id === ref.sid); if (st) return st; }
+            const list = store.students.filter(st => {
+                if (ref.teacher && storeCurAssignment(st).teacher !== ref.teacher) return false;
+                if (ref.key !== undefined && storeKey(st) !== ref.key) return false;
+                if (ref.deleted !== undefined && storeIsDeleted(st) !== ref.deleted) return false;
+                if (ref.deletedWeekKey !== undefined) { const l = st.enrollments[st.enrollments.length - 1]; if (!l || l.toWeek !== ref.deletedWeekKey) return false; }
+                return true;
+            });
+            return list[0] || null;
+        }
+        function storeRecomputeEnrollStart(st) {
+            const starts = st.assignments.map(x => x.fromWeek);
+            st.enrollments[0].fromWeek = (st.firstWeekKey && starts.every(x => x)) ? starts.reduce((m, x) => x < m ? x : m, starts[0]) : null;
+        }
+        function storeEnsureTeacher(store, t) { if (!store.teachers[t]) store.teachers[t] = { slots: { friday: [], saturday: [], sunday: [] } }; return store.teachers[t]; }
+
+        // 기본 시간표 변경
+        function opSetSlots(store, ref, slotIds) {
+            const st = storeFind(store, ref); if (!st) return false;
+            storeCurAssignment(st).slotIds = slotIds.slice(); return true;
+        }
+        // 퇴원
+        function opWithdraw(store, ref, deletedAt, deletedWeekKey) {
+            const st = storeFind(store, { ...ref, deleted: false }); if (!st) return false;
+            const l = st.enrollments[st.enrollments.length - 1];
+            l.toWeek = deletedWeekKey; l.endReason = 'deleted'; l.endedAt = deletedAt; return true;
+        }
+        // 복귀: 퇴원 구간을 'leave'로 닫고 복귀 주차부터 새 재원 구간을 연다
+        function opReturn(store, ref, returnWeekKey, slotIds, todayStr) {
+            const st = storeFind(store, { ...ref, deleted: true }); if (!st) return false;
+            const l = st.enrollments[st.enrollments.length - 1];
+            l.endReason = 'leave';
+            st.enrollments.push({ fromWeek: returnWeekKey, toWeek: null, returnedAt: todayStr });
+            storeCurAssignment(st).slotIds = slotIds.slice(); return true;
+        }
+        // 특정 주차 출석부에서만 제외
+        function opExcludeWeek(store, ref, weekKey) {
+            const st = storeFind(store, ref); if (!st) return false;
+            if (!Array.isArray(st.excludedWeeks)) st.excludedWeeks = [];
+            if (!st.excludedWeeks.includes(weekKey)) st.excludedWeeks.push(weekKey); return true;
+        }
+        // 완전 제거
+        function opRemoveStudent(store, ref) {
+            const st = storeFind(store, ref); if (!st) return false;
+            store.students.splice(store.students.indexOf(st), 1); return true;
+        }
+        // 담당 강사 변경: 현재 담당 구간을 prevWeek에서 닫고 effectiveWeek부터 새 강사 구간을 연다 (학생 레코드는 그대로 하나)
+        function opTransfer(store, ref, newTeacher, edits, chosenIds, effectiveWeek, prevWeek, transferredAt) {
+            const st = storeFind(store, ref); if (!st) return false;
+            const cur = storeCurAssignment(st), oldTeacher = cur.teacher;
+            const hadSince = !!(cur.fromWeek && (cur.fromWeek !== st.firstWeekKey || cur.sinceSet));
+            cur.toWeek = prevWeek; delete cur.sinceSet; delete cur.transferredAt;
+            if (!(cur.transferredFrom && hadSince)) delete cur.transferredFrom;
+            st.name = edits.name; st.school = edits.school; st.phone = edits.phone; st.parentPhone = edits.parentPhone;
+            storeEnsureTeacher(store, newTeacher);
+            st.assignments.push({ teacher: newTeacher, slotIds: chosenIds.slice(), fromWeek: effectiveWeek, toWeek: null, sinceSet: true, transferredFrom: oldTeacher, transferredAt });
+            return true;
+        }
+        // 학생 정보 수정(이름·학교·연락처·시간표·등록일). firstWeekKey를 바꾸면 그 주차를 따라가던 시작 주차도 같이 옮긴다.
+        function opEditStudent(store, ref, e) {
+            const st = storeFind(store, ref); if (!st) return false;
+            const cur = storeCurAssignment(st), oldFk = st.firstWeekKey || null;
+            st.name = e.name; st.school = e.school; st.phone = e.phone; st.parentPhone = e.parentPhone; st.registeredAt = e.registeredAt;
+            cur.slotIds = e.slotIds.slice();
+            if (!cur.transferredFrom && e.firstWeekKey !== oldFk) {
+                st.firstWeekKey = e.firstWeekKey;
+                st.assignments.forEach(a => { if ((a.fromWeek || null) === oldFk && !a.sinceSet) a.fromWeek = e.firstWeekKey; });
+                storeRecomputeEnrollStart(st);
+            }
+            return true;
+        }
+        // 신규/재원 등록. 개인 정보는 rec(옛 레코드 모양: name, school, phone, parentPhone, [firstWeekKey, registeredAt])에서 받는다.
+        function opAddStudent(store, teacher, rec, slotIds) {
+            storeEnsureTeacher(store, teacher);
+            const one = toStore({ [teacher]: { slots: store.teachers[teacher].slots, students: [{ ...rec, slotIds: slotIds.slice() }] } }).store.students[0];
+            let id = 'stu-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+            while (store.students.some(s => s.id === id)) id += 'x';
+            one.id = id; store.students.push(one); return true;
+        }
+        // 시간대 박스
+        function opSlotAdd(store, teacher, day, slot) { storeEnsureTeacher(store, teacher).slots[day].push({ id: slot.id, title: slot.title }); return true; }
+        function opSlotRename(store, teacher, day, slotId, title) {
+            const s = storeEnsureTeacher(store, teacher).slots[day].find(x => x.id === slotId); if (!s) return false; s.title = title; return true;
+        }
+        // 박스 삭제: 이 강사 담당 학생의 현재 시간표에서 빼고, 시간표가 비면 학생을 제거(옛 applySlotDeletion과 동일)
+        function opSlotDelete(store, teacher, day, slotId) {
+            const t = storeEnsureTeacher(store, teacher);
+            t.slots[day] = t.slots[day].filter(s => s.id !== slotId);
+            store.students = store.students.filter(st => {
+                const cur = storeCurAssignment(st); if (cur.teacher !== teacher) return true;
+                cur.slotIds = cur.slotIds.filter(id => id !== slotId);
+                return cur.slotIds.length > 0;
+            });
+            return true;
+        }
+
+        // 연산을 서버 최신본에 적용해 저장 (최신본 조회 -> 연산 -> studentStore 저장 -> 재생성한 teacherDataStore 저장)
+        async function saveStoreOp(storeOp) {
+            return enqueueSave('teacherDataStore', async () => {
+                const remoteTds = await fetchLatestRemoteData('teacherDataStore');
+                const remoteStore = await fetchLatestRemoteData('studentStore');
+                const fresh = remoteStore && remoteStore.students && remoteStore.syncedHash && remoteTds && remoteStore.syncedHash === hashTeacherData(remoteTds);
+                const store = fresh ? remoteStore : toStore(remoteTds || teacherDataStore).store;
+                if (!fresh) console.warn('studentStore가 없거나 어긋나 teacherDataStore 기준으로 재생성');
+                storeOp(store);
+                teacherDataStore = await saveStoreAndTds(store, remoteStore && remoteStore.seq);
+                refreshCurrentViewSafely();
+            });
+        }
+        // 로드 직후: 모든 학생 레코드에 sid를 붙인다(메모리만). 서버 사본은 다음 저장 때 맞춰진다.
+        function normalizeSids() {
+            if (!teacherDataStore || !Object.keys(teacherDataStore).length) return;
+            if (Object.values(teacherDataStore).every(t => (t.students || []).every(s => s.sid))) return;
+            teacherDataStore = fromStore(toStore(teacherDataStore).store);
+        }
+        // ===== /3단계 연산 =====
 
         // 출석 상태/비고 한 칸(주차+학생+시간대 단위)만 최신본 위에 얹어서 저장
         async function saveAttendanceRecord(weekKey, recordKey, recordValue) {
@@ -1038,7 +1330,7 @@
             const row = (payload.new && Object.keys(payload.new).length) ? payload.new : payload.old;
             if (!row || !row.id) return;
 
-            if (row.id === 'teacherDataStore') teacherDataStore = row.data || {};
+            if (row.id === 'teacherDataStore') { teacherDataStore = row.data || {}; normalizeSids(); }
             else if (row.id === 'attendanceRecords') attendanceRecords = row.data || {};
             else if (row.id === 'slotFreeMemos') slotFreeMemos = row.data || {};
             else if (row.id === 'globalReservations') globalReservations = row.data || [];
@@ -1703,14 +1995,13 @@
             } else {
                 sortStudentsAlphabetically(teacherName);
                 const slotIdsToApply = checkedIds.slice();
-                saveTeacherData(teacherName, (freshData) => {
-                    targetKeys.forEach(key => {
-                        const target = findStudentByIdentityKey(freshData.students, key);
-                        if (!target) return;
-                        target.slotIds = slotIdsToApply.slice();
-                        delete target.slotId;
-                    });
-                    freshData.students.sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+                const localStudents = (teacherDataStore[teacherName] && teacherDataStore[teacherName].students) || [];
+                const moveRefs = targetKeys.map(key => {
+                    const local = findStudentByIdentityKey(localStudents, key);
+                    return { sid: local && local.sid, teacher: teacherName, key };
+                });
+                saveStoreOp((store) => {
+                    moveRefs.forEach(ref => opSetSlots(store, ref, slotIdsToApply));
                 });
                 saveWeeklyOverridesForTeacher(currentSelectedWeek, teacherName);
             }
@@ -2768,11 +3059,8 @@
 퇴원 전 출석 기록은 그대로 남고, 퇴원 이후 ~ 이번 주차 전까지의 출석부에는 나타나지 않습니다.`)) return;
 
             applyReturnToRecord(student, returnWeekKey, slotIds, todayStr);
-            saveTeacherData(teacherName, (freshData) => {
-                const target = freshData.students.find(s => overrideKey(s) === studentKey && s.status === 'deleted' && !s.transferredTo && s.deletedWeekKey === deletedWeekKey);
-                if (!target) return;
-                applyReturnToRecord(target, returnWeekKey, slotIds, todayStr);
-            });
+            const returnRef = { sid: student.sid, teacher: teacherName, key: studentKey, deletedWeekKey };
+            saveStoreOp((store) => { opReturn(store, returnRef, returnWeekKey, slotIds, todayStr); });
             refreshAfterStudentListChange(teacherName);
         }
 
@@ -3014,7 +3302,7 @@
             if (studentModalMode === 'edit') {
                 const student = data.students[studentModalEditIndex];
                 if (!student) return;
-                const originalName = studentModalOriginalName;
+                const oldKeyForEdit = overrideKey(student);
                 student.name = name;
                 student.school = school;
                 student.phone = phone;
@@ -3024,38 +3312,24 @@
                 if (!student.transferredFrom) student.firstWeekKey = firstWeekKey;
                 delete student.slotId;
 
-                applyPatch = (freshData) => {
-                    // 퇴원 후 복귀한 학생은 같은 이름의 옛 퇴원 레코드가 남아있으므로 재원 중인 레코드를 우선 찾는다
-                    const target = freshData.students.find(s => s.name === originalName && s.status !== 'deleted')
-                        || freshData.students.find(s => s.name === originalName);
-                    if (!target) return;
-                    target.name = name;
-                    target.school = school;
-                    target.phone = phone;
-                    target.parentPhone = parentPhone;
-                    target.slotIds = chosenIds;
-                    target.registeredAt = registeredAt;
-                    if (!target.transferredFrom) target.firstWeekKey = firstWeekKey;
-                    delete target.slotId;
+                const editRef = { sid: student.sid, teacher: teacherName, key: oldKeyForEdit, deleted: false };
+                applyPatch = (store) => {
+                    opEditStudent(store, editRef, { name, school, phone, parentPhone, slotIds: chosenIds, registeredAt, firstWeekKey });
                 };
             } else if (studentModalAddType === 'existing') {
                 // 재원: 등록일 개념이 없는 기존 학생과 동일하게 firstWeekKey/registeredAt을 넣지 않음 -> 모든 주차에 항상 표시
-                data.students.push({ name, school, phone, parentPhone, slotIds: chosenIds });
-
-                applyPatch = (freshData) => {
-                    freshData.students.push({ name, school, phone, parentPhone, slotIds: chosenIds });
-                };
+                const newRec = { name, school, phone, parentPhone };
+                data.students.push({ ...newRec, slotIds: chosenIds });
+                applyPatch = (store) => { opAddStudent(store, teacherName, newRec, chosenIds); };
             } else {
                 // 신규: 등록일 입력값(없으면 오늘) 기준으로 firstWeekKey/registeredAt 저장 -> 그 날짜가 속한 주차부터 출석부에 표시
-                data.students.push({ name, school, phone, parentPhone, slotIds: chosenIds, firstWeekKey: firstWeekKey, registeredAt: registeredAt });
-
-                applyPatch = (freshData) => {
-                    freshData.students.push({ name, school, phone, parentPhone, slotIds: chosenIds, firstWeekKey: firstWeekKey, registeredAt: registeredAt });
-                };
+                const newRec = { name, school, phone, parentPhone, firstWeekKey: firstWeekKey, registeredAt: registeredAt };
+                data.students.push({ ...newRec, slotIds: chosenIds });
+                applyPatch = (store) => { opAddStudent(store, teacherName, newRec, chosenIds); };
             }
 
             renderFullApp(teacherName);
-            saveTeacherData(teacherName, applyPatch);
+            saveStoreOp(applyPatch);
             closeStudentModal();
         }
 
@@ -3220,14 +3494,11 @@
             newData.students.push(moved);
 
             // 새 강사 쪽을 먼저 저장해서, 중간에 실패해도 학생이 어느 출석부에서도 안 보이는 상황은 생기지 않게 함
-            const movedSnapshot = JSON.parse(JSON.stringify(moved));
-            saveTeacherData(newTeacher, (freshData) => {
-                if (freshData.students.some(s => overrideKey(s) === newKey && s.status !== 'deleted')) return;
-                freshData.students.push(JSON.parse(JSON.stringify(movedSnapshot)));
-            });
-            saveTeacherData(oldTeacher, (freshData) => {
-                const idx = freshData.students.findIndex(s => overrideKey(s) === studentKey && s.status !== 'deleted');
-                if (idx !== -1) freshData.students.splice(idx, 1);
+            // 새 구조에서는 학생 레코드 하나의 담당 구간만 바뀌므로 저장이 한 번(원자적)이다.
+            const transferRef = { sid: moved.sid, teacher: oldTeacher, key: studentKey, deleted: false };
+            saveStoreOp((store) => {
+                if (store.students.some(s => s !== storeFind(store, transferRef) && storeCurAssignment(s).teacher === newTeacher && storeKey(s) === newKey && !storeIsDeleted(s))) return;
+                opTransfer(store, transferRef, newTeacher, edits, chosenIds, effectiveWeekKey, prevWeekKey, transferredAt);
             });
             return true;
         }
@@ -3251,13 +3522,8 @@
             student.deletedAt = deletedAt;
             student.deletedWeekKey = deletedWeekKey;
 
-            saveTeacherData(teacherName, (freshData) => {
-                const target = freshData.students.find(s => overrideKey(s) === studentKey && s.status !== 'deleted');
-                if (!target) return;
-                target.status = 'deleted';
-                target.deletedAt = deletedAt;
-                target.deletedWeekKey = deletedWeekKey;
-            });
+            const withdrawRef = { sid: student.sid, teacher: teacherName, key: studentKey };
+            saveStoreOp((store) => { opWithdraw(store, withdrawRef, deletedAt, deletedWeekKey); });
 
             return student;
         }
@@ -3282,12 +3548,8 @@
 
             const studentKey = moveModalStudentIdentityKey;
             const weekToExclude = currentSelectedWeek;
-            saveTeacherData(moveModalTeacherName, (freshData) => {
-                const target = findStudentByIdentityKey(freshData.students, studentKey);
-                if (!target) return;
-                if (!Array.isArray(target.excludedWeeks)) target.excludedWeeks = [];
-                if (!target.excludedWeeks.includes(weekToExclude)) target.excludedWeeks.push(weekToExclude);
-            });
+            const excludeRef = { sid: student.sid, teacher: moveModalTeacherName, key: studentKey };
+            saveStoreOp((store) => { opExcludeWeek(store, excludeRef, weekToExclude); });
 
             const teacherName = moveModalTeacherName;
             closeMoveModal();
@@ -3316,10 +3578,8 @@
             const studentKey = overrideKey(student);
             data.students.splice(index, 1);
 
-            saveTeacherData(teacherName, (freshData) => {
-                const idx = freshData.students.findIndex(s => overrideKey(s) === studentKey);
-                if (idx !== -1) freshData.students.splice(idx, 1);
-            });
+            const removeRef = { sid: studentSnapshot.sid, teacher: teacherName, key: studentKey };
+            saveStoreOp((store) => { opRemoveStudent(store, removeRef); });
             purgeStudentEverywhere(teacherName, studentSnapshot);
 
             return student;
@@ -4229,23 +4489,18 @@
                 if (!teacherDataStore[teacherName]) initDefaultTeacherData(teacherName);
                 const newId = 'slot-' + dayKey + '-' + Date.now();
                 teacherDataStore[teacherName].slots[dayKey].push({ id: newId, title: title });
-                applyPatch = (freshData) => {
-                    freshData.slots[dayKey].push({ id: newId, title: title });
-                };
+                applyPatch = (store) => { opSlotAdd(store, teacherName, dayKey, { id: newId, title }); };
             } else if (slotModalMode === 'edit') {
                 const data = teacherDataStore[teacherName];
                 const slot = data.slots[dayKey].find(s => s.id === slotModalSlotId);
                 if (!slot) return;
                 slot.title = title;
                 const slotId = slotModalSlotId;
-                applyPatch = (freshData) => {
-                    const target = freshData.slots[dayKey].find(s => s.id === slotId);
-                    if (target) target.title = title;
-                };
+                applyPatch = (store) => { opSlotRename(store, teacherName, dayKey, slotId, title); };
             }
 
             renderFullApp(teacherName);
-            saveTeacherData(teacherName, applyPatch);
+            saveStoreOp(applyPatch);
             closeSlotModal();
         }
 
@@ -4279,7 +4534,7 @@
                 saveClassroomAssignment(dayKey, classroomKey);
             }
             renderFullApp(teacherName);
-            saveTeacherData(teacherName, (freshData) => applySlotDeletion(freshData, dayKey, slotId));
+            saveStoreOp((store) => { opSlotDelete(store, teacherName, dayKey, slotId); });
             closeSlotModal();
         }
 
