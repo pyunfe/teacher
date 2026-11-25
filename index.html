@@ -4741,7 +4741,7 @@
             var html = '';
             if (teacher) {
                 // 강사 본인 출석부: 특강마다 카드 하나, 수요일·목요일 등 시간대 박스를 한 줄로 나열
-                var cats = ['중등', '고1', '고2', '고3', '기타'];
+                var cats = ['중등', '예비고1', '예비고2', '예비고3', '기타'];
                 var catIdx = function (s) { var i = cats.indexOf(s.cat); return i < 0 ? cats.length - 1 : i; };
                 var lids = [], byLec = {};
                 slotList.slice().sort(function (a, b) { return catIdx(a) - catIdx(b); }).forEach(function (sl) {
