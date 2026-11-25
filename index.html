@@ -357,7 +357,7 @@
                 </label>
                 <label class="flex items-start space-x-2 cursor-pointer">
                     <input type="radio" name="move-scope" value="default" id="move-scope-default" onchange="renderMoveModalSlotList()" class="mt-0.5 w-4 h-4 text-primary focus:ring-primary">
-                    <span class="text-xs text-zinc-700"><b>기본 시간표 자체를 변경</b><br><span class="text-[11px] text-zinc-500">앞으로 매 주차 이 시간표로 계속 유지됩니다.</span></span>
+                    <span class="text-xs text-zinc-700"><b>기본 시간표 자체를 변경 (이번 주차부터)</b><br><span class="text-[11px] text-zinc-500">이번 주차부터 앞으로 이 시간표로 유지됩니다. 이전 주차 출석 기록은 기존 시간대에 그대로 남습니다.</span></span>
                 </label>
                 <button id="move-modal-clear-override-btn" onclick="clearMoveModalOverride()" class="hidden text-[11px] text-rose-600 hover:underline font-semibold pt-1">이번 주 임시 설정 초기화 (기본 시간표로 복원)</button>
             </div>
@@ -969,9 +969,18 @@
         function storeEnsureTeacher(store, t) { if (!store.teachers[t]) store.teachers[t] = { slots: { friday: [], saturday: [], sunday: [] } }; return store.teachers[t]; }
 
         // 기본 시간표 변경
-        function opSetSlots(store, ref, slotIds) {
+        //  effectiveWeek(변경 적용 주차)가 현재 담당 구간 시작보다 뒤면, 같은 강사의 담당 구간을 prevWeek에서 닫고 effectiveWeek부터 새 시간표 구간을 연다
+        //  (과거 주차 출석은 옛 시간대에 그대로 남음). 주차가 없거나 시작 주차 이하면 현재 구간 시간표만 교체.
+        function opSetSlots(store, ref, slotIds, effectiveWeek, prevWeek) {
             const st = storeFind(store, ref); if (!st) return false;
-            storeCurAssignment(st).slotIds = slotIds.slice(); return true;
+            const cur = storeCurAssignment(st);
+            const start = cur.fromWeek || st.firstWeekKey;
+            if (!effectiveWeek || !prevWeek || (start && effectiveWeek <= start)) { cur.slotIds = slotIds.slice(); return true; }  // 시작 주차가 없으면(옛 데이터) 처음부터 있던 것으로 보고 항상 구간을 나눔
+            const hadSince = !!(cur.fromWeek && (cur.fromWeek !== st.firstWeekKey || cur.sinceSet));
+            cur.toWeek = prevWeek; delete cur.sinceSet; delete cur.transferredAt;
+            if (!(cur.transferredFrom && hadSince)) delete cur.transferredFrom;
+            st.assignments.push({ teacher: cur.teacher, slotIds: slotIds.slice(), fromWeek: effectiveWeek, toWeek: null, sinceSet: true });
+            return true;
         }
         // 퇴원
         function opWithdraw(store, ref, deletedAt, deletedWeekKey) {
@@ -1011,12 +1020,16 @@
             return true;
         }
         // 학생 정보 수정(이름·학교·연락처·시간표·등록일). firstWeekKey를 바꾸면 그 주차를 따라가던 시작 주차도 같이 옮긴다.
+        //  시간표(slotIds)가 실제로 바뀐 경우에만 e.effectiveWeek(보고 있던 주차)부터 적용(opSetSlots) — 이전 주차 출석은 옛 시간대에 남는다.
         function opEditStudent(store, ref, e) {
             const st = storeFind(store, ref); if (!st) return false;
-            const cur = storeCurAssignment(st), oldFk = st.firstWeekKey || null;
+            const wasTransferred = !!storeCurAssignment(st).transferredFrom, oldFk = st.firstWeekKey || null;
+            const sameSlots = (a, b) => a.length === b.length && a.slice().sort().join('|') === b.slice().sort().join('|');
+            if (!sameSlots(storeCurAssignment(st).slotIds, e.slotIds)) opSetSlots(store, ref, e.slotIds, e.effectiveWeek, e.prevWeek);
+            const cur = storeCurAssignment(st);
             st.name = e.name; st.school = e.school; st.phone = e.phone; st.parentPhone = e.parentPhone; st.registeredAt = e.registeredAt;
             cur.slotIds = e.slotIds.slice();
-            if (!cur.transferredFrom && e.firstWeekKey !== oldFk) {
+            if (!wasTransferred && e.firstWeekKey !== oldFk) {
                 st.firstWeekKey = e.firstWeekKey;
                 st.assignments.forEach(a => { if ((a.fromWeek || null) === oldFk && !a.sinceSet) a.fromWeek = e.firstWeekKey; });
                 storeRecomputeEnrollStart(st);
@@ -1979,9 +1992,9 @@
                         : (moveModalAnchorSlotId ? [moveModalAnchorSlotId] : getEffectiveSlotIds(teacherName, student, currentSelectedWeek));
                     applyWeeklyMove(teacherName, student, currentSelectedWeek, anchorIds, checkedIds);
                 } else {
-                    // 기본 시간표 자체를 변경. 이번 주차에 걸려있던 임시 이동 기록은 정리한다.
-                    student.slotIds = checkedIds.slice();
-                    delete student.slotId;
+                    // 기본 시간표 자체를 변경 (선택한 주차부터). 이전 주차 출석은 옛 시간대에 남도록 같은 강사의 이전 구간으로 기록한다.
+                    applyDefaultSlotChangeFromWeek(student, teacherName, checkedIds, currentSelectedWeek);
+                    // 이번 주차에 걸려있던 임시 이동 기록은 정리한다.
                     const wk = weeklyOverrides[currentSelectedWeek];
                     if (wk && wk[teacherName]) {
                         delete wk[teacherName][key];
@@ -1995,13 +2008,14 @@
             } else {
                 sortStudentsAlphabetically(teacherName);
                 const slotIdsToApply = checkedIds.slice();
+                const effWeek = currentSelectedWeek, prevWk = prevWeekKeyOf(effWeek);
                 const localStudents = (teacherDataStore[teacherName] && teacherDataStore[teacherName].students) || [];
                 const moveRefs = targetKeys.map(key => {
                     const local = findStudentByIdentityKey(localStudents, key);
                     return { sid: local && local.sid, teacher: teacherName, key };
                 });
                 saveStoreOp((store) => {
-                    moveRefs.forEach(ref => opSetSlots(store, ref, slotIdsToApply));
+                    moveRefs.forEach(ref => opSetSlots(store, ref, slotIdsToApply, effWeek, prevWk));
                 });
                 saveWeeklyOverridesForTeacher(currentSelectedWeek, teacherName);
             }
@@ -2260,6 +2274,44 @@
             const diffToSaturday = (dayOfWeek === 0) ? -1 : 6 - dayOfWeek;
             d.setDate(d.getDate() + diffToSaturday);
             return `${getFormattedDate(d)} 주차`;
+        }
+
+        // '2026-11-14 주차' → 바로 전 주차 키
+        function prevWeekKeyOf(weekKey) {
+            const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(weekKey || '');
+            if (!m) return null;
+            return computeWeekKeyForDate(new Date(+m[1], +m[2] - 1, +m[3] - 7));
+        }
+
+        // 기본 시간표를 effectiveWeek부터 변경: 현재 구간이 그 주차 이전에 시작했다면 옛 시간표를 같은 강사의 이전 구간(prevTeachers)으로 남긴다.
+        // (getRosterWithPast가 이전 구간을 해당 기간 동안만 옛 시간대에 표시. opSetSlots와 같은 규칙)
+        function applyDefaultSlotChangeFromWeek(rec, teacherName, newSlotIds, effectiveWeek) {
+            const start = rec.teacherSince || rec.firstWeekKey;
+            const prevWeek = prevWeekKeyOf(effectiveWeek);
+            if (effectiveWeek && prevWeek && !(start && effectiveWeek <= start)) {  // 시작 주차가 없으면(옛 데이터) 처음부터 있던 것으로 보고 항상 구간을 나눔
+                const entry = { teacher: teacherName, slotIds: getStudentSlotIds(rec), fromWeek: rec.teacherSince || null, toWeek: prevWeek };
+                if (rec.transferredFrom && rec.teacherSince) entry.transferredFrom = rec.transferredFrom;
+                rec.prevTeachers = (Array.isArray(rec.prevTeachers) ? rec.prevTeachers : []).concat([entry]);
+                rec.teacherSince = effectiveWeek;
+                delete rec.transferredFrom; delete rec.transferredAt;
+            }
+            rec.slotIds = newSlotIds.slice();
+            delete rec.slotId;
+        }
+
+        // 학생 정보 수정 저장(로컬 레코드). 시간표가 실제로 바뀐 경우에만 effectiveWeek부터 적용하고 이전 주차는 옛 시간대에 남긴다. (opEditStudent와 같은 규칙)
+        function applyStudentEditToRecord(student, teacherName, e, effectiveWeek) {
+            const wasTransferred = !!student.transferredFrom;
+            const sameSlots = (a, b) => a.length === b.length && a.slice().sort().join('|') === b.slice().sort().join('|');
+            if (!sameSlots(getStudentSlotIds(student), e.slotIds)) applyDefaultSlotChangeFromWeek(student, teacherName, e.slotIds, effectiveWeek);
+            student.name = e.name;
+            student.school = e.school;
+            student.phone = e.phone;
+            student.parentPhone = e.parentPhone;
+            student.slotIds = e.slotIds.slice();
+            student.registeredAt = e.registeredAt;
+            if (!wasTransferred) student.firstWeekKey = e.firstWeekKey;
+            delete student.slotId;
         }
 
         // 학생이 특정 주차 출석부에 표시되어야 하는지 여부.
@@ -3303,18 +3355,12 @@
                 const student = data.students[studentModalEditIndex];
                 if (!student) return;
                 const oldKeyForEdit = overrideKey(student);
-                student.name = name;
-                student.school = school;
-                student.phone = phone;
-                student.parentPhone = parentPhone;
-                student.slotIds = chosenIds;
-                student.registeredAt = registeredAt;
-                if (!student.transferredFrom) student.firstWeekKey = firstWeekKey;
-                delete student.slotId;
+                const effWeek = currentSelectedWeek, prevWk = prevWeekKeyOf(effWeek);
+                applyStudentEditToRecord(student, teacherName, { name, school, phone, parentPhone, slotIds: chosenIds, registeredAt, firstWeekKey }, effWeek);
 
                 const editRef = { sid: student.sid, teacher: teacherName, key: oldKeyForEdit, deleted: false };
                 applyPatch = (store) => {
-                    opEditStudent(store, editRef, { name, school, phone, parentPhone, slotIds: chosenIds, registeredAt, firstWeekKey });
+                    opEditStudent(store, editRef, { name, school, phone, parentPhone, slotIds: chosenIds, registeredAt, firstWeekKey, effectiveWeek: effWeek, prevWeek: prevWk });
                 };
             } else if (studentModalAddType === 'existing') {
                 // 재원: 등록일 개념이 없는 기존 학생과 동일하게 firstWeekKey/registeredAt을 넣지 않음 -> 모든 주차에 항상 표시
@@ -3433,7 +3479,9 @@
             document.getElementById("student-modal-transfer-hint").classList.toggle("hidden", !transferring);
             document.getElementById("student-modal-slot-label").innerText = transferring
                 ? "새 강사의 시간표 배치 (여러 개 선택 가능)"
-                : "시간표 배치 (여러 개 선택 가능)";
+                : (studentModalMode === 'edit'
+                    ? `시간표 배치 (여러 개 선택 가능) — 바꾸면 현재 보고 있는 ${currentSelectedWeek}부터 적용, 이전 주차 출석은 기존 시간대에 남음`
+                    : "시간표 배치 (여러 개 선택 가능)");
             if (transferring) updateStudentModalTransferHint();
         }
 
