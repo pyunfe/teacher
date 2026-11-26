@@ -4647,6 +4647,12 @@
         var spSel = {};                // 특강+시간대 key -> 선택된 회차 class_id
         var spLoading = false;
 
+        // "청라고" + "고1" → "청라고1" (홈페이지 가입 화면과 같은 표기)
+        function spSchoolGrade(sc, gr) {
+            sc = String(sc || '').trim(); gr = String(gr || '').trim();
+            var m = gr.match(/^([초중고])(\d)$/);
+            return (m && sc.slice(-1) === m[1]) ? sc + m[2] : (sc + ' ' + gr).trim();
+        }
         function spEsc(t) { return String(t == null ? '' : t).replace(/[&<>"']/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]; }); }
         // "정다운T", "정다운 선생님", "황성웅 원장님" → "정다운"
         function spNormTeacher(t) { return String(t || '').replace(/\s+/g, '').replace(/(선생님|원장님|T)$/i, ''); }
@@ -4812,7 +4818,7 @@
                 var absCls = !x.present ? "bg-[#fee2e2] text-[#b91c1c] font-bold" : "bg-zinc-100 text-zinc-500 font-semibold";
                 var sid = "'" + x.student_id + "'";
                 return '<div class="flex items-center p-2 rounded-lg border border-zinc-200 bg-white shadow-sm hover:border-primary">' +
-                    '<div class="w-24 shrink-0 truncate mr-1.5"><span class="font-bold text-xs text-zinc-900">' + spEsc(x.name) + '</span> <span class="text-[10px] text-zinc-500">(' + spEsc(x.school) + ' ' + spEsc(x.grade) + ')</span></div>' +
+                    '<div class="w-24 shrink-0 truncate mr-1.5"><span class="font-bold text-xs text-zinc-900">' + spEsc(x.name) + '</span> <span class="text-[10px] text-zinc-500">(' + spEsc(spSchoolGrade(x.school, x.grade)) + ')</span></div>' +
                     '<div class="flex items-center space-x-1 shrink-0 mr-1.5">' +
                     '<button onclick="spMark(' + id + ',' + sid + ',true)" class="px-2 py-0.5 text-[11px] rounded ' + attCls + '">출석</button>' +
                     '<button onclick="spMark(' + id + ',' + sid + ',false)" class="px-2 py-0.5 text-[11px] rounded ' + absCls + '">결석</button></div>' +
