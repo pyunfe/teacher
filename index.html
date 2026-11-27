@@ -306,6 +306,7 @@
                     </div>
                 </div>
                 <div id="special-body" class="space-y-4"></div>
+                <div id="special-notes" class="space-y-8"></div>
             </section>
 
             <section id="tab-admin-reservations" class="hidden space-y-6">
@@ -4669,7 +4670,7 @@
 
         function spRerenderIfOpen() {
             var sec = document.getElementById("tab-special");
-            if (sec && !sec.classList.contains("hidden")) spRender();
+            if (sec && !sec.classList.contains("hidden")) { spRender(); spNoteRender(); }
         }
 
         async function spRpc(name, args) {
@@ -4691,7 +4692,12 @@
             }
             spClasses = res.data || [];
             spRosters = {};   // 명단은 보이는 회차마다 최신으로 다시 받는다
+            // 통특강(자습실형): 회차 없이 날짜별 비고만 적는 주간 표. SQL 미실행이면 조용히 건너뛴다.
+            var nl = await spRpc('sp_note_lectures', {});
+            spNoteLecs = (nl && !nl.error && Array.isArray(nl.data)) ? nl.data : [];
+            spNoteData = {};
             spRender();
+            spNoteRender();
         }
 
         function spVisibleClasses() {
@@ -4706,6 +4712,7 @@
             var teacher = spTargetTeacher();
             if (title) title.innerText = teacher ? teacher + 'T 특강 출석부' : '전체 특강 출석부';
             var list = spVisibleClasses();
+            if (!list.length && spNoteVisible().length) { body.innerHTML = ''; return; }   // 통특강 표만 있는 강사
             if (!list.length) {
                 body.innerHTML = '<div class="bg-white p-10 rounded-2xl border border-zinc-200 text-center text-sm text-zinc-400">' +
                     (teacher ? spEsc(teacher) + 'T 담당으로 등록된 특강 회차가 없습니다.' : '등록된 특강 회차가 없습니다.') + '</div>';
@@ -4793,6 +4800,93 @@
             });
             body.innerHTML = '<div class="space-y-8">' + html + '</div>';
             shown.forEach(function (id) { if (!spRosters[id]) spLoadRoster(id); });
+        }
+
+        // ---------------------------------------------------------------------
+        // 통특강(자습실형) 주간 비고 출석부: 왼쪽 학생, 위에 월~금, 칸마다 비고만 적는다.
+        //  - 데이터: sp_notes (RPC sp_note_lectures / sp_note_roster / sp_note_set)
+        // ---------------------------------------------------------------------
+        var spNoteLecs = [];     // 통특강 목록
+        var spNoteWeek = {};     // 특강 id -> 보고 있는 주의 월요일 (YYYY-MM-DD)
+        var spNoteData = {};     // 특강id:월요일 -> 수강생 배열 [{student_id,name,school,grade,notes:{날짜:비고}}]
+
+        function spNoteVisible() {
+            var t = spTargetTeacher();
+            return spNoteLecs.filter(function (l) { return !t || spNormTeacher(l.instructor) === t; });
+        }
+        function spAddDays(ymd, n) { var d = parseYmdToLocalDate(ymd); d.setDate(d.getDate() + n); return getFormattedDate(d); }
+        function spMonday(ymd) { var d = parseYmdToLocalDate(ymd); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return getFormattedDate(d); }
+
+        function spNoteRender() {
+            var box = document.getElementById('special-notes');
+            if (!box) return;
+            var ls = spNoteVisible();
+            if (!ls.length) { box.innerHTML = ''; return; }
+            var today = spToday();
+            box.innerHTML = ls.map(function (l) {
+                var m = /^(\d{4}-\d{2}-\d{2}) ~ (\d{4}-\d{2}-\d{2})$/.exec(l.description || '');
+                if (!m) return '';
+                var first = spMonday(m[1]), last = spMonday(m[2]);
+                var wk = spNoteWeek[l.id] || spMonday(today < m[1] ? m[1] : today > m[2] ? m[2] : today);
+                if (wk < first) wk = first;
+                if (wk > last) wk = last;
+                spNoteWeek[l.id] = wk;
+                var days = [0, 1, 2, 3, 4].map(function (i) { return spAddDays(wk, i); });
+                var key = l.id + ':' + wk;
+                var rows = spNoteData[key];
+                if (rows === undefined) spNoteLoad(l.id, wk);
+                var head = days.map(function (d) {
+                    var out = d < m[1] || d > m[2];
+                    return '<th class="border border-zinc-200 px-2 py-2 text-xs font-bold ' + (d === today ? 'bg-primary text-white' : out ? 'bg-zinc-100 text-zinc-400' : 'bg-zinc-50 text-zinc-700') + '" style="min-width:120px">' + spFmtDate(d) + '</th>';
+                }).join('');
+                var body;
+                if (!rows) body = '<tr><td colspan="8" class="text-center text-xs text-zinc-400 py-6">' + (rows === undefined || rows === null ? '불러오는 중...' : '') + '</td></tr>';
+                else if (!rows.length) body = '<tr><td colspan="8" class="text-center text-xs text-zinc-400 py-6">신청한 학생이 없습니다.</td></tr>';
+                else body = rows.map(function (x, i) {
+                    var cells = days.map(function (d) {
+                        var out = d < m[1] || d > m[2];
+                        var v = (x.notes && x.notes[d]) || '';
+                        return '<td class="border border-zinc-200 p-0 ' + (out ? 'bg-zinc-100' : '') + '"><input type="text" ' + (out ? 'disabled' : '') + ' value="' + spEsc(v) + '" maxlength="200" ' +
+                            'onchange="spNoteSave(' + l.id + ',\'' + x.student_id + '\',\'' + d + '\',this)" class="w-full h-9 px-2 text-xs bg-transparent focus:outline-none focus:bg-yellow-50 ' + (v ? 'bg-yellow-50 font-semibold text-zinc-800' : 'text-zinc-700') + '"></td>';
+                    }).join('');
+                    return '<tr><td class="border border-zinc-200 px-2 py-1 text-center text-[11px] text-zinc-400 bg-zinc-50">' + (i + 1) + '</td>' +
+                        '<td class="border border-zinc-200 px-2 py-1 text-xs font-bold text-zinc-900 whitespace-nowrap bg-zinc-50">' + spEsc(x.name) + '</td>' +
+                        '<td class="border border-zinc-200 px-2 py-1 text-xs text-zinc-600 whitespace-nowrap">' + spEsc(spSchoolGrade(x.school, x.grade)) + '</td>' + cells + '</tr>';
+                }).join('');
+                return '<div class="bg-white p-5 rounded-2xl shadow-sm border border-zinc-200">' +
+                    '<div class="flex flex-wrap justify-between items-center gap-2 mb-4 pb-2 border-b border-zinc-100">' +
+                    '<h3 class="text-primary font-extrabold text-lg">' + spEsc(l.title) + ' <span class="text-xs font-semibold text-zinc-400">(' + spEsc(l.instructor) + ' · ' + spFmtDate(m[1]) + ' ~ ' + spFmtDate(m[2]) + ' · ' + (rows ? rows.length : l.taken) + '명)</span></h3>' +
+                    '<div class="flex items-center gap-1.5">' +
+                    '<button onclick="spNoteNav(' + l.id + ',-1)" ' + (wk <= first ? 'disabled' : '') + ' class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-zinc-100 text-zinc-700 hover:bg-zinc-200 disabled:opacity-40">◀ 이전 주</button>' +
+                    '<span class="text-xs font-bold text-zinc-700 px-2">' + spFmtDate(days[0]) + ' ~ ' + spFmtDate(days[4]) + '</span>' +
+                    '<button onclick="spNoteNav(' + l.id + ',1)" ' + (wk >= last ? 'disabled' : '') + ' class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-zinc-100 text-zinc-700 hover:bg-zinc-200 disabled:opacity-40">다음 주 ▶</button>' +
+                    '<button onclick="spNoteNav(' + l.id + ',0)" class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-zinc-100 text-zinc-700 hover:bg-zinc-200">이번 주</button></div></div>' +
+                    '<div class="overflow-x-auto"><table class="w-full border-collapse"><thead><tr>' +
+                    '<th class="border border-zinc-200 bg-zinc-50 px-2 py-2 text-xs w-10">#</th>' +
+                    '<th class="border border-zinc-200 bg-zinc-50 px-2 py-2 text-xs" style="min-width:70px">이름</th>' +
+                    '<th class="border border-zinc-200 bg-zinc-50 px-2 py-2 text-xs" style="min-width:90px">학교</th>' + head + '</tr></thead><tbody>' + body + '</tbody></table></div></div>';
+            }).join('');
+        }
+        async function spNoteLoad(lid, wk) {
+            var key = lid + ':' + wk;
+            spNoteData[key] = null;   // 불러오는 중(다시 요청하지 않음)
+            var res = await spRpc('sp_note_roster', { p_lecture: lid, p_from: wk, p_to: spAddDays(wk, 4) });
+            if (res.error) { alert('명단을 불러오지 못했습니다: ' + res.error.message); spNoteData[key] = []; }
+            else spNoteData[key] = res.data || [];
+            if (spNoteWeek[lid] === wk) spNoteRender();
+        }
+        function spNoteNav(lid, dir) {
+            var cur = spNoteWeek[lid] || spMonday(spToday());
+            spNoteWeek[lid] = dir === 0 ? spMonday(spToday()) : spAddDays(cur, 7 * dir);
+            spNoteRender();
+        }
+        async function spNoteSave(lid, sid, ymd, el) {
+            var res = await spRpc('sp_note_set', { p_lecture: lid, p_student: sid, p_day: ymd, p_note: el.value });
+            if (res.error) { alert('저장하지 못했습니다: ' + res.error.message); return; }
+            var rows = spNoteData[lid + ':' + spNoteWeek[lid]] || [];
+            var st = rows.filter(function (x) { return x.student_id === sid; })[0];
+            if (st) { st.notes = st.notes || {}; if (el.value.trim()) st.notes[ymd] = el.value.trim(); else delete st.notes[ymd]; }
+            el.classList.toggle('bg-yellow-50', !!el.value.trim());
         }
 
         function spPickDate(key, id) {
