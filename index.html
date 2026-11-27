@@ -4840,8 +4840,8 @@
                     return '<th class="border border-zinc-200 px-2 py-2 text-xs font-bold ' + (d === today ? 'bg-primary text-white' : out ? 'bg-zinc-100 text-zinc-400' : 'bg-zinc-50 text-zinc-700') + '" style="min-width:120px">' + spFmtDate(d) + '</th>';
                 }).join('');
                 var body;
-                if (!rows) body = '<tr><td colspan="8" class="text-center text-xs text-zinc-400 py-6">' + (rows === undefined || rows === null ? '불러오는 중...' : '') + '</td></tr>';
-                else if (!rows.length) body = '<tr><td colspan="8" class="text-center text-xs text-zinc-400 py-6">신청한 학생이 없습니다.</td></tr>';
+                if (!rows) body = '<tr><td colspan="7" class="text-center text-xs text-zinc-400 py-6">' + (rows === undefined || rows === null ? '불러오는 중...' : '') + '</td></tr>';
+                else if (!rows.length) body = '<tr><td colspan="7" class="text-center text-xs text-zinc-400 py-6">신청한 학생이 없습니다.</td></tr>';
                 else body = rows.map(function (x, i) {
                     var cells = days.map(function (d) {
                         var out = d < m[1] || d > m[2];
@@ -4850,8 +4850,7 @@
                             'onchange="spNoteSave(' + l.id + ',\'' + x.student_id + '\',\'' + d + '\',this)" class="w-full h-9 px-2 text-xs bg-transparent focus:outline-none focus:bg-yellow-50 ' + (v ? 'bg-yellow-50 font-semibold text-zinc-800' : 'text-zinc-700') + '"></td>';
                     }).join('');
                     return '<tr><td class="border border-zinc-200 px-2 py-1 text-center text-[11px] text-zinc-400 bg-zinc-50">' + (i + 1) + '</td>' +
-                        '<td class="border border-zinc-200 px-2 py-1 text-xs font-bold text-zinc-900 whitespace-nowrap bg-zinc-50">' + spEsc(x.name) + '</td>' +
-                        '<td class="border border-zinc-200 px-2 py-1 text-xs text-zinc-600 whitespace-nowrap">' + spEsc(spSchoolGrade(x.school, x.grade)) + '</td>' + cells + '</tr>';
+                        '<td class="border border-zinc-200 px-2 py-1 text-xs font-bold text-zinc-900 whitespace-nowrap bg-zinc-50">' + spEsc(x.name) + ' <span class="font-normal text-zinc-500">(' + spEsc(spSchoolGrade(x.school, x.grade)) + ')</span></td>' + cells + '</tr>';
                 }).join('');
                 return '<div class="bg-white p-5 rounded-2xl shadow-sm border border-zinc-200">' +
                     '<div class="flex flex-wrap justify-between items-center gap-2 mb-4 pb-2 border-b border-zinc-100">' +
@@ -4863,8 +4862,7 @@
                     '<button onclick="spNoteNav(' + l.id + ',0)" class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-zinc-100 text-zinc-700 hover:bg-zinc-200">이번 주</button></div></div>' +
                     '<div class="overflow-x-auto"><table class="w-full border-collapse"><thead><tr>' +
                     '<th class="border border-zinc-200 bg-zinc-50 px-2 py-2 text-xs w-10">#</th>' +
-                    '<th class="border border-zinc-200 bg-zinc-50 px-2 py-2 text-xs" style="min-width:70px">이름</th>' +
-                    '<th class="border border-zinc-200 bg-zinc-50 px-2 py-2 text-xs" style="min-width:90px">학교</th>' + head + '</tr></thead><tbody>' + body + '</tbody></table></div></div>';
+                    '<th class="border border-zinc-200 bg-zinc-50 px-2 py-2 text-xs" style="min-width:130px">이름</th>' + head + '</tr></thead><tbody>' + body + '</tbody></table></div></div>';
             }).join('');
         }
         async function spNoteLoad(lid, wk) {
